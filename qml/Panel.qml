@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import qs.Ui
@@ -46,6 +47,15 @@ Panel {
     function notify(text) { console.log("deck:", String(text)) }
   }
 
+  // A section may live in this plugin or in another installed plugin. Absolute
+  // paths are how the bundle wires sections from their own repositories without
+  // copying files into Deck.
+  function resolvePath(path) {
+    var value = String(path || "")
+    if (value === "") return ""
+    return value.charAt(0) === "/" ? "file://" + value : root.pluginDir + "/" + value
+  }
+
   function registerSection(id, item) {
     var next = ({})
     for (var k in sectionMap) next[k] = sectionMap[k]
@@ -66,7 +76,7 @@ Panel {
     if (entry.page) {
       pageTitle = String(entry.title || entry.id || "")
       pageSectionId = String(entry.id || "")
-      pageSource = root.pluginDir + "/" + String(entry.page)
+      pageSource = root.resolvePath(String(entry.page))
       return
     }
     var item = sectionMap[String(entry.id)]
@@ -104,22 +114,42 @@ Panel {
   }
 
   // ---- section registry -------------------------------------------------
+  //
+  // Two registries, user first. ~/.config/deck/sections.json lets the bundle
+  // point at sections living in their own installed plugins without editing
+  // this plugin's git checkout; the bundled file is the fallback.
+  property bool userRegistryPresent: false
+
+  function loadSections(raw, source) {
+    try {
+      var parsed = JSON.parse(raw || "{}")
+      root.sections = parsed.sections || []
+    } catch (e) {
+      // A malformed registry must not take the bar down. Keep what was
+      // loaded before and say so where a developer will see it.
+      console.warn("deck: " + source + " is not valid JSON:", e)
+    }
+  }
+
   FileView {
-    id: registry
-    path: root.pluginDir + "/sections.json"
+    id: userRegistry
+    path: Quickshell.env("HOME") + "/.config/deck/sections.json"
     watchChanges: true
     printErrors: false
     onFileChanged: reload()
     onLoaded: {
-      try {
-        var parsed = JSON.parse(text() || "{}")
-        root.sections = parsed.sections || []
-      } catch (e) {
-        // A malformed registry must not take the bar down. Keep what was
-        // loaded before and say so where a developer will see it.
-        console.warn("deck: sections.json is not valid JSON:", e)
-      }
+      root.userRegistryPresent = true
+      root.loadSections(text(), "~/.config/deck/sections.json")
     }
+  }
+
+  FileView {
+    id: bundledRegistry
+    path: root.pluginDir + "/sections.json"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: if (!root.userRegistryPresent) root.loadSections(text(), "bundled sections.json")
   }
 
   // ---- bar button -------------------------------------------------------
@@ -183,7 +213,7 @@ Panel {
 
             Loader {
               id: sectionLoader
-              source: root.pluginDir + "/" + modelData.file
+              source: root.resolvePath(modelData.file)
               onLoaded: root.registerSection(modelData.id, item)
               onStatusChanged: {
                 if (status === Loader.Error)
@@ -253,20 +283,39 @@ Panel {
           }
         }
 
-        Loader {
-          id: pageLoader
+        // Pages can be long (a network list, a device list). Cap the height and
+        // scroll rather than letting the panel grow past the screen.
+        ScrollView {
+          id: pageScroll
           width: parent.width
-          source: root.pageSource
+          height: Math.min(pageLoader.item ? pageLoader.item.implicitHeight : 0, Style.space(420))
+          clip: true
+          ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+          ScrollBar.vertical.policy: (pageLoader.item && pageLoader.item.implicitHeight > height)
+            ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+
+          Loader {
+            id: pageLoader
+            width: pageScroll.availableWidth
+            source: root.pageSource
           // The page is a VIEW of the section, not a second copy of its state:
           // it is handed the live instance. Tile and page cannot disagree.
           onLoaded: {
             if (!item) return
             if ("section" in item) item.section = root.sectionMap[String(root.pageSectionId)]
             if ("host" in item) item.host = root.host
+            // Sections from other repositories keep their logic in a `state`
+            // object; the page is rendered by both Deck and the standalone
+            // widget, so it binds to `state` rather than to Deck's wrapper.
+            if ("state" in item) {
+              var sec = root.sectionMap[String(root.pageSectionId)]
+              item.state = sec && sec.state ? sec.state : sec
+            }
           }
-          onStatusChanged: {
-            if (status === Loader.Error)
-              console.warn("deck: failed to load page", root.pageSource, pageLoader.errorString())
+            onStatusChanged: {
+              if (status === Loader.Error)
+                console.warn("deck: failed to load page", root.pageSource, pageLoader.errorString())
+            }
           }
         }
       }

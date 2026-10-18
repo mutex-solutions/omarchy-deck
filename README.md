@@ -8,11 +8,13 @@ components listed in `sections.json`. A section is not a plugin. It has no
 manifest, Omarchy never discovers it, and only Deck reads it. The full interface
 is in [`docs/CONTRACT.md`](docs/CONTRACT.md).
 
-**Status: barebone.** This repository is the host and the contract only. It
-ships one example section so the panel is not empty; the real sections (audio,
-Bluetooth, Wi-Fi, display) are not here yet.
+**Status: host and contract.** This repository ships the panel, the contract,
+and one example section. The real sections live in their own repositories and
+are wired in by `install-bundle.sh`.
 
 ## Install
+
+**Deck alone** (one example section):
 
 ```bash
 omarchy plugin add https://github.com/mutex-solutions/omarchy-deck --enable
@@ -20,6 +22,22 @@ omarchy plugin add https://github.com/mutex-solutions/omarchy-deck --enable
 
 The panel appears in the bar as `▦`. With only the example section it looks like
 a single tile. That is expected.
+
+**Deck with the author's sections** (audio, Wi-Fi, Bluetooth, display, night
+light, lid awake):
+
+```bash
+git clone https://github.com/mutex-solutions/omarchy-deck
+cd omarchy-deck
+./install-bundle.sh
+```
+
+Each section is installed from its own repository, then wired into Deck. They
+are not placed in the bar: Deck hosts them. Pass `--bar` if you also want each
+one as a standalone bar widget.
+
+The bundle writes `~/.config/deck/sections.json`, which Deck prefers over the
+registry in its own checkout, so `omarchy plugin update` stays clean.
 
 ## The contract in one screen
 
@@ -30,6 +48,10 @@ sections.json          one line per section
 sections/<id>.qml      state + tile face      (required)
 sections/<id>-page.qml detail view            (optional)
 ```
+
+A section may live in another installed plugin. Point `file` and `page` at an
+absolute path and Deck loads it from there; that is how the bundle wires the
+audio, Wi-Fi and Bluetooth sections without copying files into Deck.
 
 **`sections/<id>.qml`** must expose:
 

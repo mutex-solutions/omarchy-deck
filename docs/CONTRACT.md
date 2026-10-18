@@ -23,8 +23,8 @@ never imports a system service. Everything it knows comes from the section.
 | --- | --- | --- | --- |
 | `id` | string | required | unique within Deck; also the name used by the `toggleSection` IPC call |
 | `title` | string | `id` | the page header |
-| `file` | string | required | section component, relative to the plugin root |
-| `page` | string | none | detail page; omit for no page |
+| `file` | string | required | section component; relative to Deck's plugin root, or absolute to load it from another installed plugin |
+| `page` | string | none | detail page, same path rules; omit for no page |
 | `span` | `1` or `2` | `1` | 2 claims a full row, 1 is half |
 | `hidden` | bool | `false` | leave it out of the grid |
 
