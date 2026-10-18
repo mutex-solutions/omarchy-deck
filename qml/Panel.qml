@@ -162,11 +162,12 @@ Panel {
       spacing: Style.space(10)
 
       // ---------------- grid ----------------
-      Grid {
+      // Flow, not Grid: Flow honours a child's width, so a section can claim a
+      // full row by asking for span 2. Grid would clip it into a column.
+      Flow {
         id: grid
         width: parent.width
         visible: !root.pageOpen
-        columns: 2
         spacing: Style.space(10)
 
         Repeater {
@@ -175,7 +176,9 @@ Panel {
           delegate: Tile {
             required property var modelData
 
-            width: (grid.width - grid.spacing) / 2
+            // span 2 = a full row; anything else = half
+            readonly property int span: modelData.span === 2 ? 2 : 1
+            width: span === 2 ? grid.width : (grid.width - grid.spacing) / 2
             height: Style.space(78)
 
             Loader {
@@ -184,7 +187,7 @@ Panel {
               onLoaded: root.registerSection(modelData.id, item)
               onStatusChanged: {
                 if (status === Loader.Error)
-                  console.warn("deck: failed to load section", modelData.id, errorString())
+                  console.warn("deck: failed to load section", modelData.id, sectionLoader.errorString())
               }
             }
 
@@ -263,7 +266,7 @@ Panel {
           }
           onStatusChanged: {
             if (status === Loader.Error)
-              console.warn("deck: failed to load page", root.pageSource, errorString())
+              console.warn("deck: failed to load page", root.pageSource, pageLoader.errorString())
           }
         }
       }
