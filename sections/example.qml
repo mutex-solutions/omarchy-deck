@@ -1,6 +1,6 @@
 import QtQuick
 
-// A section — copy this directory entry and this file to add a control.
+// A section. Copy this file and its registry entry to add a control.
 //
 // The contract is five members. Deck reads these and nothing else:
 //

@@ -1,7 +1,7 @@
 import QtQuick
 import qs.Commons
 
-// A page — what opens when the tile is held.
+// A page: what opens when the tile is held.
 //
 // Deck injects two properties and draws the back button, the title and the
 // frame itself. A page that draws its own back button is a contract violation.

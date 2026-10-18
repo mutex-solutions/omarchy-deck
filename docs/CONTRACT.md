@@ -1,146 +1,143 @@
-# Deck section contract v1
+# Deck Section Contract v1
 
-The host (Panel.qml) lays out tiles, owns gestures, and swaps pages. It never
-imports a system service. Everything it knows comes from the section.
+Deck is an Omarchy plugin. What it hosts is a **section**.
 
-## A section is a directory
+That distinction matters because both words are already spoken for:
 
-```
-sections/<id>/
-  section.json     placement + behaviour (data)
-  Section.qml      state + tile face (required)
-  Page.qml         detail view (optional)
-```
+| Term | Means | Owned by |
+| --- | --- | --- |
+| plugin | a directory with `manifest.json`, discovered by Omarchy | Omarchy |
+| section | a QML component listed in Deck's `sections.json` | Deck |
 
-## 1. `section.json` — placement and behaviour
+A section is not a plugin. It has no manifest, Omarchy never discovers it, and
+it cannot be installed with `omarchy plugin add`. Only Deck reads it.
+
+The host (`qml/Panel.qml`) lays out tiles, owns gestures, and swaps pages. It
+never imports a system service. Everything it knows comes from the section.
+
+## The registry
+
+`sections.json`, at the plugin root:
 
 | Key | Type | Default | Meaning |
-|---|---|---|---|
-| `id` | string | required | unique; also the IPC name |
-| `title` | string | `id` | page header |
-| `icon` | string | `"•"` | fallback glyph if the section does not supply one |
-| `order` | int | 100 | sort position; ties break by id |
-| `size` | `{w,h}` | `{w:2,h:1}` | grid units; grid is 4 columns wide |
-| `toggleable` | bool | `true` | see gestures below |
-| `hold` | `"page" \| "none"` | `"page"` | whether a hold opens a page |
-| `page` | string | — | required when `hold` is `"page"` |
+| --- | --- | --- | --- |
+| `id` | string | required | unique within Deck; also the name used by the `toggleSection` IPC call |
+| `title` | string | `id` | the page header |
+| `file` | string | required | section component, relative to the plugin root |
+| `page` | string | none | detail page; omit for no page |
+| `span` | `1` or `2` | `1` | 2 claims a full row, 1 is half |
 | `hidden` | bool | `false` | leave it out of the grid |
 
-Config (`~/.config/deck/config.json`) may override `order`, `size`, `hidden`
-and `accent`. Precedence is **section.json defaults < config.json**, and the
-merged result is what the host uses. The section can never read config itself —
-that keeps one parser (the helper) and one precedence rule.
+The registry is explicit. Nothing is scanned, so a half-written section cannot
+appear in the panel.
 
-## 2. `Section.qml` — state lives here, and only here
+## Section.qml
 
 Required:
 
 | Member | Type | Meaning |
-|---|---|---|
-| `active` | `bool` | on/off. Drives the tile's accent colour. |
-| `label` | `string` | tile title line |
-| `detail` | `string` | tile second line |
-| `icon` | `string` | glyph |
-| `toggle()` | function | what a click does when `toggleable` |
+| --- | --- | --- |
+| `active` | bool | on or off; drives the tile's accent colour |
+| `label` | string | tile title |
+| `detail` | string | tile second line |
+| `icon` | string | glyph |
+| `toggle()` | function | what a click does |
 
-Optional:
-
-| Member | Type | Meaning |
-|---|---|---|
-| `busy` | `bool` | dims the tile and swallows input while an action settles |
-| `customTile` | `Component` | replaces the default icon+label+detail body |
-| `actions` | `list<{id,title,icon}>` | extra verbs exposed to IPC/keybinds |
-
-**The section is the single source of truth.** The tile and its page read the
-same instance — the page is handed `section`, it does not create a second copy.
-That is what makes "tile shows on, page shows the list" impossible to desync.
-
-## 3. `Page.qml` — detail view
+## Page.qml
 
 | Member | Type | Meaning |
-|---|---|---|
-| `section` | `var` | injected: the live Section instance |
-| `host` | `var` | injected: `{ close(), notify(text) }` |
+| --- | --- | --- |
+| `section` | var | injected: the live section instance |
+| `host` | var | injected: `{ close(), notify(text) }` |
 
-The page renders **content only**. The host draws the back button, the title,
-and the frame, and owns the popout lifecycle. A page that draws its own back
-button is a contract violation.
+The page renders content only. The host draws the back button, the title, and
+the frame. A page that draws its own back button is a contract violation.
 
-## 4. Gestures
+**State lives in the section, never in the page.** The page is handed the same
+instance the tile reads, so the two cannot disagree. Anything that must survive
+closing the page belongs in the section.
 
-| `toggleable` | click | hold |
-|---|---|---|
-| `true` | `toggle()` | page |
-| `false` | page | page |
+## Gestures
 
-A hold **never** toggles. A tap renders no hold indicator: the progress hairline
-is attached only after 180 ms, so short presses show nothing at all.
+| click | hold |
+| --- | --- |
+| `toggle()` | opens the page, when the registry entry has one |
 
-## 5. Lifecycle
+A hold never toggles. A tap shows no hold indicator: the progress hairline is
+attached 180 ms after the press begins, so short presses show nothing at all.
 
-- Sections load once when the plugin loads and stay mounted, visible or not.
-  Local state (a password field, a scroll position) survives closing the panel.
-- Pages load when held and are destroyed on back. They must therefore derive
-  everything from `section`, not from their own memory.
-- A section that fails to load is skipped and logged; it must not take the
-  panel or the bar down with it.
+## Lifecycle
 
-## 6. What the host guarantees / does not
+- Sections load when the plugin loads and stay mounted. Local state, such as a
+  password field or a scroll position, survives closing the panel.
+- Pages load when held and are destroyed on back. They derive everything from
+  `section`, not from their own memory.
+- A section that fails to load is skipped and logged. It must not take the panel
+  or the bar down with it.
 
-Guarantees: theming (`Style`, `Color`), the grid, gestures, page chrome, the
-notice strip, error isolation per `Loader`.
+## What the host guarantees
 
-Does **not** guarantee: process isolation (a crashing section can take the
-panel with it), cross-section messaging (sections must not talk to each other),
-or discovery (the registry is explicit — a section is listed, not scanned).
+Theming through `qs.Commons` (`Style`, `Color`, `Util`), the grid, gestures,
+page chrome, and error isolation per loader.
 
-## 7. Page layout conventions
+## What it does not guarantee
 
-Taken from Apple's actual Wi-Fi and Bluetooth screens (Apple Support's Wi-Fi
-status menu; macOS System Settings › Bluetooth), adapted to Deck's dark theme
-and to omaudiopanel's row layout — rows, not cards.
+- **Process isolation.** One QML engine, so a crashing section can take the
+  panel with it.
+- **Cross-section messaging.** Sections must not talk to each other.
+- **Discovery.** The registry is explicit: a section is listed, not scanned.
 
-**Structure, both pages:**
+## Page layout conventions
+
+Taken from Apple's Wi-Fi and Bluetooth screens (Apple Support's Wi-Fi status
+menu; macOS System Settings, Bluetooth), adapted to Deck's dark theme and to
+omaudiopanel's row layout: rows, not cards.
 
 ```
-[←]  Title                         [toggle]     header: back, title, master switch
-───────────────────────────────────────────
-SECTION LABEL                                     small-caps, muted
-  ◉  item name                    trailing      one row per item
-  ○  item name                    trailing
+[<-]  Title                        [toggle]     header: back, title, master switch
+---------------------------------------------
+SECTION LABEL                                    small caps, muted
+  (*)  item name                   trailing     one row per item
+  ( )  item name                   trailing
 ```
 
 Rules that carry across every page:
 
-- **The master toggle lives in the header**, not as a row. Apple puts Wi-Fi on/off
-  and Bluetooth on/off there, and it keeps the list about *choices*, not state.
-- **Grouped sections with small-caps labels** (`Known Network`, `Other Networks`,
-  `My Devices`, `Nearby Devices`), not one flat list.
+- **The master toggle lives in the header**, not as a row. Apple puts Wi-Fi and
+  Bluetooth on/off there, and it keeps the list about choices, not state.
+- **Grouped sections with small caps labels** (`Known Network`,
+  `Other Networks`, `My Devices`, `Nearby Devices`), not one flat list.
 - **The connected item is marked by its leading icon**, filled in the accent
-  colour — not by a checkmark on the right. The right edge is reserved for
-  status (lock, signal, battery).
-- **Secondary status sits on the row's second line** (`Connected — 78%`), not as
+  colour. The right edge is reserved for status: lock, signal, battery.
+- **Secondary status sits on the row's second line** (`Connected, 78%`), not in
   another column.
-- **Destructive or scanning actions are explicit**: a `Connect` button on a
-  nearby device, a spinner while scanning. Never "click anywhere and hope".
-- **An empty group says so** — `No devices` — rather than disappearing, so the
-  user knows the group is empty rather than missing.
-- **A footer action** (`Wi-Fi Settings…`) is the escape hatch to the full system
-  UI for the long tail we do not implement.
+- **Actions are explicit**: a `Connect` button on a nearby device, a spinner
+  while scanning. Never "click anywhere and hope".
+- **An empty group says so** (`No devices`) rather than disappearing, so the
+  user knows it is empty rather than missing.
+- **A footer action** (`Open Omarchy network settings...`) is the escape hatch to
+  the full system UI for the long tail we do not implement.
 
-## 8. Minimal example
+## Minimal example
 
 ```qml
-// Section.qml
+// sections/example.qml
 import QtQuick
-import Quickshell
-import Quickshell.Networking
 
 Item {
-  readonly property bool active: Networking.wifiEnabled
-  readonly property string label: "Wi-Fi"
-  readonly property string detail: Networking.wifiEnabled ? "on" : "off"
-  readonly property string icon: "≋"
-  function toggle() { Networking.wifiEnabled = !Networking.wifiEnabled }
+  property bool active: false
+
+  readonly property string label: "Example"
+  readonly property string detail: active ? "on" : "off"
+  readonly property string icon: "◇"
+
+  function toggle() { active = !active }
 }
+```
+
+Registered in `sections.json`:
+
+```json
+{ "id": "example", "title": "Example",
+  "file": "sections/example.qml", "page": "sections/example-page.qml", "span": 2 }
 ```

@@ -3,6 +3,11 @@
 A pluggable control surface for the Omarchy bar. One icon opens a panel of
 tiles; **click toggles, hold opens that tile's page.**
 
+Deck is an Omarchy **plugin**. What it hosts are **sections**: plain QML
+components listed in `sections.json`. A section is not a plugin. It has no
+manifest, Omarchy never discovers it, and only Deck reads it. The full interface
+is in [`docs/CONTRACT.md`](docs/CONTRACT.md).
+
 **Status: barebone.** This repository is the host and the contract only. It
 ships one example section so the panel is not empty; the real sections (audio,
 Bluetooth, Wi-Fi, display) are not here yet.
@@ -14,7 +19,7 @@ omarchy plugin add https://github.com/mutex-solutions/omarchy-deck --enable
 ```
 
 The panel appears in the bar as `▦`. With only the example section it looks like
-a single tile — that is expected.
+a single tile. That is expected.
 
 ## The contract in one screen
 
@@ -30,7 +35,7 @@ sections/<id>-page.qml detail view            (optional)
 
 | Member | Type | Meaning |
 |---|---|---|
-| `active` | `bool` | on/off — drives the tile's colour |
+| `active` | `bool` | on/off; drives the tile's colour |
 | `label` | `string` | tile title |
 | `detail` | `string` | tile second line |
 | `icon` | `string` | glyph |
@@ -40,7 +45,7 @@ sections/<id>-page.qml detail view            (optional)
 
 | Member | Type | Meaning |
 |---|---|---|
-| `section` | `var` | the live section instance — the page reads state from here |
+| `section` | `var` | the live section instance; the page reads state from here |
 | `host` | `var` | `{ close(), notify(text) }` |
 
 Deck draws the back button, the title and the frame. A page that draws its own
@@ -60,16 +65,17 @@ Full rationale, gestures and lifecycle: [`docs/CONTRACT.md`](docs/CONTRACT.md).
 4. `omarchy restart shell`.
 
 The host does not change. If adding a section ever requires editing `qml/`, the
-contract is wrong — that is the property this repo exists to protect.
+contract is wrong. That is the property this repo exists to protect.
 
 ## What the host does and does not do
 
-**Does:** the popup, the 2-column grid, click-vs-hold, page swap and back, theme
-via `qs.Commons` (`Style`, `Color`, `Util`), error isolation per loader.
+**Does:** the popup, the grid (half-width and full-row tiles), click-vs-hold,
+page swap and back, theme via `qs.Commons` (`Style`, `Color`, `Util`), error
+isolation per loader.
 
 **Does not:** know anything about what a section controls, cache section state,
 isolate sections from each other (one QML engine), or discover sections
-automatically — the registry is explicit so a half-written section cannot appear.
+automatically. The registry is explicit, so a half-written section cannot appear.
 
 ## Requirements
 
@@ -77,4 +83,4 @@ automatically — the registry is explicit so a half-written section cannot appe
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

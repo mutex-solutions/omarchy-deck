@@ -4,7 +4,7 @@ import Quickshell.Io
 import qs.Ui
 import qs.Commons
 
-// Deck — a pluggable control surface.
+// Deck: a pluggable control surface.
 //
 // The panel is a host. It owns the popup, the grid, the page swap and the
 // gestures; it knows nothing about Wi-Fi or Bluetooth. Everything it shows
@@ -13,7 +13,7 @@ import qs.Commons
 //
 //   active, label, detail, icon, stockPanel, toggle()
 //
-// and optionally a `page` — a component Deck renders in place of the grid,
+// and optionally a `page`, a component Deck renders in place of the grid,
 // under a back button. The page owns its own data and actions.
 //
 // Adding a control = one file + one line in sections.json. This file does not
@@ -60,7 +60,7 @@ Panel {
   }
 
   // Hold: open this section's page inside Deck. If it has no page, fall back to
-  // the stock Omarchy panel — still useful, and better than doing nothing.
+  // the stock Omarchy panel. Still useful, and better than doing nothing.
   function openPage(entry) {
     if (!entry) return
     if (entry.page) {
