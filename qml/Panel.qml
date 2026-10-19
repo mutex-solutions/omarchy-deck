@@ -216,7 +216,9 @@ Panel {
               return (n === 1 || n === 2 || n === 4) ? n : 2
             }
             width: Math.floor(span * grid.unit + (span - 1) * grid.spacing)
-            height: Style.space(78)
+            // Height is the unit, as in the mock: 1 unit is a square, 2 units is
+            // a wide tile, 4 units is a full row.
+            height: Math.floor(grid.unit)
 
             Loader {
               id: sectionLoader
