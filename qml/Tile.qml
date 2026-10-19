@@ -21,6 +21,10 @@ Item {
   readonly property string detail: section && section.detail !== undefined ? String(section.detail) : ""
   readonly property string icon: section && section.icon !== undefined ? String(section.icon) : ""
 
+  // A 1-unit tile is a square and cannot hold a glyph and a legible label at
+  // once, so it renders icon-only and keeps the name in the tooltip.
+  property bool compact: false
+
   property bool hovered: false
   property bool didLongPress: false
 
@@ -47,8 +51,19 @@ Item {
     anchors.fill: parent
     anchors.margins: Style.space(12)
 
+    // compact square: glyph only, centred
+    Text {
+      visible: tile.compact
+      anchors.centerIn: parent
+      text: tile.icon
+      color: tile.active ? Color.accent : Color.foreground
+      font.family: Style.font.family
+      font.pixelSize: Style.font.display
+    }
+
     Text {
       id: iconText
+      visible: !tile.compact
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
       text: tile.icon
@@ -60,6 +75,7 @@ Item {
     }
 
     Column {
+      visible: !tile.compact
       anchors.left: iconText.right
       anchors.leftMargin: Style.space(11)
       anchors.right: parent.right
