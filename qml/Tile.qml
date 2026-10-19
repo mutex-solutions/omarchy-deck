@@ -33,7 +33,10 @@ Item {
   property bool hovered: false
   property bool didLongPress: false
 
+  // A custom tile draws its own body (the connectivity cluster is four
+  // buttons), so the host's surface and border would just be a box around them.
   Rectangle {
+    visible: !tile.custom
     anchors.fill: parent
     radius: Style.cornerRadius
     color: tile.active
