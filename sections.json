@@ -1,12 +1,12 @@
 {
-  "_comment": "One entry per section. `file` is the state component (required); `page` is its detail view (optional); `span` 2 claims a full row. Deck reads only these paths and the members documented in docs/CONTRACT.md.",
+  "_comment": "One entry per section. `file` is the state component (required); `page` is its detail view (optional); `span` is in grid units: 1 narrow, 2 half (default), 4 full row. Deck reads only these paths and the members documented in docs/CONTRACT.md.",
   "sections": [
     {
       "id": "example",
       "title": "Example",
       "file": "sections/example.qml",
       "page": "sections/example-page.qml",
-      "span": 2
+      "span": 4
     }
   ]
 }

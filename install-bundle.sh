@@ -47,8 +47,8 @@ SECTIONS=(
   "mutex-solutions.wifi|https://github.com/mutex-solutions/omarchy-wifi.git|Wi-Fi|2"
   "mutex-solutions.bluetooth|https://github.com/mutex-solutions/omarchy-bluetooth.git|Bluetooth|2"
   "mutex-solutions.display|https://github.com/mutex-solutions/omarchy-display.git|Display|2"
-  "mutex-solutions.nightlight|https://github.com/mutex-solutions/omarchy-nightlight.git|Night light|1"
-  "mutex-solutions.lid-awake|https://github.com/mutex-solutions/omarchy-lid-awake.git|Lid Awake|1"
+  "mutex-solutions.nightlight|https://github.com/mutex-solutions/omarchy-nightlight.git|Night light|2"
+  "mutex-solutions.lid-awake|https://github.com/mutex-solutions/omarchy-lid-awake.git|Lid Awake|2"
 )
 
 installed() { [ -f "$PLUGINS/$1/manifest.json" ]; }

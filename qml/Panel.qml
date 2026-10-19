@@ -192,13 +192,17 @@ Panel {
       spacing: Style.space(10)
 
       // ---------------- grid ----------------
-      // Flow, not Grid: Flow honours a child's width, so a section can claim a
-      // full row by asking for span 2. Grid would clip it into a column.
+      // Flow, not Grid: Flow honours a child's width, so a section can claim
+      // one, two or four grid units. Grid would clip a full-row tile.
       Flow {
         id: grid
         width: parent.width
         visible: !root.pageOpen
-        spacing: Style.space(10)
+        spacing: Style.space(9)
+        // Four units across, as in the design mock. A normal tile is 2 units
+        // (half width); 4 claims a whole row. Collapsing this to two columns is
+        // what turned the panel into a list of full-width rows.
+        readonly property real unit: (width - 3 * spacing) / 4
 
         Repeater {
           model: root.sections
@@ -206,9 +210,12 @@ Panel {
           delegate: Tile {
             required property var modelData
 
-            // span 2 = a full row; anything else = half
-            readonly property int span: modelData.span === 2 ? 2 : 1
-            width: span === 2 ? grid.width : (grid.width - grid.spacing) / 2
+            // span is in grid units: 1 narrow, 2 half (default), 4 full row.
+            readonly property int span: {
+              var n = Number(modelData.span)
+              return (n === 1 || n === 2 || n === 4) ? n : 2
+            }
+            width: Math.floor(span * grid.unit + (span - 1) * grid.spacing)
             height: Style.space(78)
 
             Loader {

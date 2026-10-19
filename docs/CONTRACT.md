@@ -25,7 +25,7 @@ never imports a system service. Everything it knows comes from the section.
 | `title` | string | `id` | the page header |
 | `file` | string | required | section component; relative to Deck's plugin root, or absolute to load it from another installed plugin |
 | `page` | string | none | detail page, same path rules; omit for no page |
-| `span` | `1` or `2` | `1` | 2 claims a full row, 1 is half |
+| `span` | `1`, `2` or `4` | `2` | grid units on a 4-column grid: 1 narrow, 2 half, 4 full row |
 | `hidden` | bool | `false` | leave it out of the grid |
 
 The registry is explicit. Nothing is scanned, so a half-written section cannot
@@ -139,5 +139,5 @@ Registered in `sections.json`:
 
 ```json
 { "id": "example", "title": "Example",
-  "file": "sections/example.qml", "page": "sections/example-page.qml", "span": 2 }
+  "file": "sections/example.qml", "page": "sections/example-page.qml", "span": 4 }
 ```
