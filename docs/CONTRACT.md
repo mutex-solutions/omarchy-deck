@@ -25,7 +25,8 @@ never imports a system service. Everything it knows comes from the section.
 | `title` | string | `id` | the page header |
 | `file` | string | required | section component; relative to Deck's plugin root, or absolute to load it from another installed plugin |
 | `page` | string | none | detail page, same path rules; omit for no page |
-| `span` | `1`, `2` or `4` | `2` | grid units on a 4-column grid: 1 is a square and renders icon-only, 2 is half width, 4 is a full row |
+| `span` | `1`, `2` or `4` | `2` | grid units across: 1 is a square and renders icon-only, 2 is half width, 4 is a full row |
+| `rows` | `1` or `2` | `1` | grid units tall; 2 makes the 2x2 cluster tile |
 | `hidden` | bool | `false` | leave it out of the grid |
 
 The registry is explicit. Nothing is scanned, so a half-written section cannot
@@ -42,6 +43,8 @@ Required:
 | `detail` | string | tile second line |
 | `icon` | string | glyph |
 | `toggle()` | function | what a click does |
+| `tileComponent` | `Component` | optional: replaces the default tile body (the connectivity cluster is four buttons) |
+| `notice` | object | optional: `{ severity: "info" \| "urgent", title, detail }`; Deck draws it in the shared strip |
 
 ## Page.qml
 

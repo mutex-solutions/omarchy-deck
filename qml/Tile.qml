@@ -25,6 +25,11 @@ Item {
   // once, so it renders icon-only and keeps the name in the tooltip.
   property bool compact: false
 
+  // A section may supply its own tile body (the connectivity cluster is four
+  // buttons, not one glyph). When it does, the host's default body and its
+  // gesture are disabled so the custom controls receive the clicks.
+  readonly property bool custom: !!(section && section.tileComponent)
+
   property bool hovered: false
   property bool didLongPress: false
 
@@ -47,7 +52,15 @@ Item {
   // Plain Item + anchors, not a Row: Qt refuses vertical anchors on Row
   // children ("Row will not function") and lays them out anyway, leaving the
   // hit area subtly wrong.
+  Loader {
+    anchors.fill: parent
+    anchors.margins: Style.space(8)
+    visible: tile.custom
+    sourceComponent: tile.custom && tile.section ? tile.section.tileComponent : null
+  }
+
   Item {
+    visible: !tile.custom
     anchors.fill: parent
     anchors.margins: Style.space(12)
 
@@ -152,6 +165,7 @@ Item {
 
   MouseArea {
     anchors.fill: parent
+    enabled: !tile.custom
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton
     cursorShape: Qt.PointingHandCursor

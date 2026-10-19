@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.Ui
@@ -34,6 +35,17 @@ Panel {
   // id -> loaded section item, so an IPC call or keybind can drive a section
   // without the panel being open.
   property var sectionMap: ({})
+
+  // The first notice any section publishes. A section exposes
+  // `notice = { severity, title, detail }` or null; Deck draws the strip, so the
+  // grid stays pure controls and severity can be graded honestly.
+  readonly property var notice: {
+    for (var id in sectionMap) {
+      var item = sectionMap[id]
+      if (item && item.notice && item.notice.title) return item.notice
+    }
+    return null
+  }
 
   property string pageSource: ""
   property string pageTitle: ""
@@ -192,17 +204,17 @@ Panel {
       spacing: Style.space(10)
 
       // ---------------- grid ----------------
-      // Flow, not Grid: Flow honours a child's width, so a section can claim
-      // one, two or four grid units. Grid would clip a full-row tile.
-      Flow {
+      // GridLayout, not Flow: a section may span rows as well as columns (the
+      // connectivity cluster is 2x2), and Flow cannot place a neighbour beside
+      // a two-row tile. Four units across, as in the design mock.
+      GridLayout {
         id: grid
         width: parent.width
         visible: !root.pageOpen
-        spacing: Style.space(9)
-        // Four units across, as in the design mock. A normal tile is 2 units
-        // (half width); 4 claims a whole row. Collapsing this to two columns is
-        // what turned the panel into a list of full-width rows.
-        readonly property real unit: (width - 3 * spacing) / 4
+        columns: 4
+        columnSpacing: Style.space(9)
+        rowSpacing: Style.space(9)
+        readonly property real unit: (width - 3 * columnSpacing) / 4
 
         Repeater {
           model: root.sections
@@ -215,11 +227,16 @@ Panel {
               var n = Number(modelData.span)
               return (n === 1 || n === 2 || n === 4) ? n : 2
             }
-            compact: span === 1
-            width: Math.floor(span * grid.unit + (span - 1) * grid.spacing)
-            // Height is the unit, as in the mock: 1 unit is a square, 2 units is
-            // a wide tile, 4 units is a full row.
-            height: Math.floor(grid.unit)
+            // rows is 1 by default; 2 makes a 2x2 cluster tile.
+            readonly property int rowspan: Number(modelData.rows) === 2 ? 2 : 1
+
+            compact: span === 1 && rowspan === 1
+            Layout.columnSpan: span
+            Layout.rowSpan: rowspan
+            Layout.preferredWidth: Math.floor(span * grid.unit + (span - 1) * grid.columnSpacing)
+            Layout.preferredHeight: Math.floor(rowspan * grid.unit + (rowspan - 1) * grid.rowSpacing)
+            Layout.fillWidth: false
+            Layout.fillHeight: false
 
             Loader {
               id: sectionLoader
@@ -239,6 +256,68 @@ Panel {
             }
 
             onHeldLong: root.openPage(modelData)
+          }
+        }
+      }
+
+      // ---------------- notice strip ----------------
+      Item {
+        width: parent.width
+        height: Style.space(38)
+        visible: !root.pageOpen && root.notice !== null
+
+        readonly property bool urgent: !!root.notice && root.notice.severity === "urgent"
+
+        Rectangle {
+          anchors.fill: parent
+          color: Util.alpha(parent.urgent ? Color.urgent : Color.foreground, 0.05)
+          border.width: 1
+          border.color: Util.alpha(Color.foreground, 0.16)
+        }
+
+        Rectangle {
+          width: 2
+          height: parent.height
+          color: parent.urgent ? Color.urgent : Util.alpha(Color.foreground, 0.34)
+        }
+
+        Text {
+          id: noticeGlyph
+          anchors.left: parent.left
+          anchors.leftMargin: Style.space(9)
+          anchors.verticalCenter: parent.verticalCenter
+          text: parent.urgent ? "!" : "⚡"
+          color: parent.urgent ? Color.urgent : Util.alpha(Color.foreground, 0.7)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.body
+        }
+
+        Column {
+          anchors.left: noticeGlyph.right
+          anchors.leftMargin: Style.space(8)
+          anchors.right: parent.right
+          anchors.rightMargin: Style.space(9)
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: 1
+
+          Text {
+            width: parent.width
+            text: root.notice ? String(root.notice.title) : ""
+            color: Color.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            elide: Text.ElideRight
+          }
+
+          Text {
+            width: parent.width
+            visible: !!root.notice && !!root.notice.detail
+            text: root.notice ? String(root.notice.detail) : ""
+            color: Util.alpha(Color.foreground, 0.55)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            elide: Text.ElideRight
           }
         }
       }

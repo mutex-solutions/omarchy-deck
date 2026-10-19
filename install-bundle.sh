@@ -41,9 +41,10 @@ die() { printf 'install-bundle: %s\n' "$*" >&2; exit 1; }
 
 command -v omarchy >/dev/null || die "this is not an Omarchy machine"
 
-# id | repo | title | span
+# id | repo | title | span | rows
 SECTIONS=(
-  "mutex-solutions.audio|https://github.com/mutex-solutions/omarchy-audio.git|Audio|2"
+  "mutex-solutions.connectivity|https://github.com/mutex-solutions/omarchy-connectivity.git|Connectivity|2|2"
+  "mutex-solutions.audio|https://github.com/mutex-solutions/omarchy-audio.git|Audio|2|1"
   "mutex-solutions.wifi|https://github.com/mutex-solutions/omarchy-wifi.git|Wi-Fi|2"
   "mutex-solutions.bluetooth|https://github.com/mutex-solutions/omarchy-bluetooth.git|Bluetooth|2"
   "mutex-solutions.display|https://github.com/mutex-solutions/omarchy-display.git|Display|2"
@@ -74,7 +75,7 @@ fi
 mkdir -p "$(dirname "$USER_REGISTRY")"
 entries=""
 for row in "${SECTIONS[@]}"; do
-  IFS='|' read -r id url title span <<< "$row"
+  IFS='|' read -r id url title span rows <<< "$row"
 
   if installed "$id"; then
     say "$id -> already installed"
@@ -94,7 +95,7 @@ for row in "${SECTIONS[@]}"; do
 
   [ -n "$entries" ] && entries="$entries,"
   entries="$entries
-    { \"id\": \"$(basename "$id" | cut -d. -f2)\", \"title\": \"$title\", \"file\": \"$section_file\", \"page\": \"$page_file\", \"span\": $span }"
+    { \"id\": \"$(basename "$id" | cut -d. -f2)\", \"title\": \"$title\", \"file\": \"$section_file\", \"page\": \"$page_file\", \"span\": $span, \"rows\": ${rows:-1} }"
 done
 
 cat > "$USER_REGISTRY" <<EOF
