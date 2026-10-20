@@ -62,10 +62,10 @@ Item {
 
   opacity: tile.dragging ? 0.25 : 1.0
 
-  // A custom tile draws its own body (the connectivity cluster is four
-  // buttons), so the host's surface and border would just be a box around them.
+  // Every tile carries the same surface and border, custom body or not. A
+  // custom body used to replace the chrome entirely, which left the 4x1
+  // Sessions/Audio/Display tiles without a border.
   Rectangle {
-    visible: !tile.custom || tile.compact
     anchors.fill: parent
     radius: Style.cornerRadius
     color: tile.active

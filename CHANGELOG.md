@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1
+
+- **Every tile keeps the standard surface and border.** A custom body used to
+  replace the tile chrome, which left the 4x1 Sessions, Audio and Display
+  tiles without a border. The custom body now draws on the same surface as
+  everything else.
+
 ## 0.6.0
 
 - **A section can look different at each size.** `tileCompact`, `tileHalf`,
