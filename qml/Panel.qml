@@ -385,8 +385,10 @@ Panel {
           height: Math.min(pageLoader.item ? pageLoader.item.implicitHeight : 0, Style.space(420))
           clip: true
           ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-          ScrollBar.vertical.policy: (pageLoader.item && pageLoader.item.implicitHeight > height)
-            ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+          // No visible scrollbar: it overlays the right edge of the page
+          // content (the display page's rate control and switches) and blocks
+          // them. The view still scrolls by wheel and touch.
+          ScrollBar.vertical.policy: ScrollBar.AlwaysOff
 
           Loader {
             id: pageLoader

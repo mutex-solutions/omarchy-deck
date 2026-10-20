@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+- The page ScrollBar is hidden. It overlays the right edge of the page content
+  and blocked controls there (the Display page's rate chevron and switches).
+  The page still scrolls by wheel and touch.
+
 ## 0.1.0 (2026-10-18)
 
 Barebone: the host and the contract, no real sections yet.

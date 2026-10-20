@@ -2,11 +2,13 @@
   "schemaVersion": 1,
   "id": "mutex-solutions.deck",
   "name": "Deck",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "mutex-solutions",
   "license": "MIT",
   "description": "A pluggable control surface for the Omarchy bar. Tiles toggle on click; hold opens their page.",
-  "kinds": ["bar-widget"],
+  "kinds": [
+    "bar-widget"
+  ],
   "entryPoints": {
     "barWidget": "qml/Panel.qml"
   },
