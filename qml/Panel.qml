@@ -36,6 +36,18 @@ Panel {
   // read-only catalogue owned by the plugin or the bundle.
   property var registrySections: []
   property var layout: ({})
+  // The user's display order. A section absent from it keeps its registry
+  // position; dragging writes this array.
+  property var order: []
+
+  // Drag state. The ghost lives in the popup, outside the scroll view, so it
+  // is not clipped by the grid while the pointer moves.
+  property string draggingId: ""
+  property string dropTargetId: ""
+  property real dragX: 0
+  property real dragY: 0
+  property real dragW: 0
+  property real dragH: 0
 
   // The embedded catalog of first-party sections. It is only a list of what
   // can be installed; the registry is what is actually installed.
@@ -83,6 +95,17 @@ Panel {
         rows: rows
       })
     }
+    var registryIndex = ({})
+    for (var r = 0; r < registrySections.length; r++)
+      registryIndex[String(registrySections[r].id)] = r
+
+    out.sort(function(a, b) {
+      var ia = order.indexOf(a.id)
+      var ib = order.indexOf(b.id)
+      if (ia === -1) ia = 100000 + (registryIndex[a.id] || 0)
+      if (ib === -1) ib = 100000 + (registryIndex[b.id] || 0)
+      return ia - ib
+    })
     return out
   }
 
@@ -172,6 +195,63 @@ Panel {
     updateLayout(id, { shown: true, span: span, rows: rows })
   }
 
+  function moveInOrder(id, targetId) {
+    id = String(id)
+    targetId = String(targetId)
+    if (id === "" || targetId === "" || id === targetId) return
+    var ids = order.slice()
+    // A fresh install may have no order yet; seed it from what is on screen.
+    if (ids.length === 0)
+      for (var i = 0; i < allSections.length; i++) ids.push(allSections[i].id)
+    for (var j = 0; j < allSections.length; j++)
+      if (ids.indexOf(allSections[j].id) === -1) ids.push(allSections[j].id)
+
+    ids = ids.filter(function(v) { return v !== id })
+    var at = ids.indexOf(targetId)
+    if (at === -1) at = ids.length
+    ids.splice(at, 0, id)
+    order = ids
+    saveLayout()
+  }
+
+  function beginDrag(id, w, h, cx, cy) {
+    draggingId = String(id)
+    dropTargetId = ""
+    dragW = w
+    dragH = h
+    dragX = cx
+    dragY = cy
+  }
+
+  function moveDrag(px, py, target) {
+    dragX = px
+    dragY = py
+    dropTargetId = target
+  }
+
+  function moveDragAt(px, py) {
+    var target = ""
+    var kids = grid.children
+    for (var i = 0; i < kids.length; i++) {
+      var c = kids[i]
+      if (!c || c.modelData === undefined) continue
+      if (String(c.modelData.id) === String(draggingId)) continue
+      var p = c.mapToItem(gridHost, 0, 0)
+      if (px >= p.x && px <= p.x + c.width && py >= p.y && py <= p.y + c.height) {
+        target = String(c.modelData.id)
+        break
+      }
+    }
+    moveDrag(px, py, target)
+  }
+
+  function endDrag() {
+    if (draggingId !== "" && dropTargetId !== "" && dropTargetId !== draggingId)
+      moveInOrder(draggingId, dropTargetId)
+    draggingId = ""
+    dropTargetId = ""
+  }
+
   function reloadRegistry() {
     root.userRegistryPresent = true
     userRegistry.reload()
@@ -209,7 +289,7 @@ Panel {
   }
 
   function saveLayout() {
-    var payload = JSON.stringify({ version: 1, entries: layout })
+    var payload = JSON.stringify({ version: 1, order: order, entries: layout })
     Quickshell.execDetached(["bash", "-c",
       "printf '%s' " + Util.shellQuote(payload) + " > " + Util.shellQuote(root.layoutPath)])
   }
@@ -223,6 +303,10 @@ Panel {
     for (var q in patch) cur[q] = patch[q]
     next[String(id)] = cur
     layout = next
+    // A section that becomes visible for the first time goes at the end; a
+    // hidden one keeps its place so re-adding it does not jump the queue.
+    if (cur.shown === true && order.indexOf(String(id)) === -1)
+      order = order.concat([String(id)])
     saveLayout()
   }
 
@@ -359,6 +443,9 @@ Panel {
       root.view = "grid"
       root.chooserId = ""
     }
+    function move(id: string, target: string) {
+      root.moveInOrder(String(id), String(target))
+    }
   }
 
   // ---- section registry -------------------------------------------------
@@ -412,6 +499,7 @@ Panel {
       try {
         var parsed = JSON.parse(text() || "{}")
         root.layout = parsed.entries || ({})
+        root.order = parsed.order || []
       } catch (e) {
         console.warn("deck: ~/.config/deck/layout.json is not valid JSON:", e)
       }
@@ -490,6 +578,15 @@ Panel {
     height: Style.space(34)
 
     readonly property bool canSize: !!entry && entry.installed === true
+
+    // The row itself is a door too: a user should not have to find the size
+    // chip to see what a control can look like.
+    MouseArea {
+      anchors.fill: parent
+      enabled: row.canSize
+      cursorShape: row.canSize ? Qt.PointingHandCursor : Qt.ArrowCursor
+      onClicked: row.sizeRequested()
+    }
 
     Column {
       anchors.left: parent.left
@@ -723,29 +820,28 @@ Panel {
         }
 
         Rectangle {
-          id: editChip
+          id: addChip
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          width: editText.implicitWidth + Style.space(16)
-          height: Style.space(20)
+          width: Style.space(22)
+          height: Style.space(22)
           radius: Style.cornerRadius
-          color: editMouse.containsMouse
+          color: addMouse.containsMouse
             ? Util.alpha(Color.accent, Style.hoverFillAlpha)
             : "transparent"
           border.width: 1
-          border.color: Util.alpha(Color.foreground, 0.32)
+          border.color: Util.alpha(Color.accent, 0.45)
 
           Text {
-            id: editText
             anchors.centerIn: parent
-            text: "Edit"
-            color: Color.foreground
+            text: "+"
+            color: Color.accent
             font.family: Style.font.family
-            font.pixelSize: Style.font.caption
+            font.pixelSize: Style.font.title
           }
 
           MouseArea {
-            id: editMouse
+            id: addMouse
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
@@ -765,9 +861,17 @@ Panel {
       }
 
       // ---------------- grid ----------------
-      // GridLayout, not Flow: a section may span rows as well as columns (the
-      // connectivity cluster is 2x2), and Flow cannot place a neighbour beside
-      // a two-row tile. Four units across, as in the design mock.
+      // The host exists so the drag ghost and the grid share a coordinate
+      // space: both are in the scrolled content, not in the popup window.
+      Item {
+        id: gridHost
+        width: parent.width
+        height: grid.implicitHeight
+        visible: !root.pageOpen && root.view === "grid"
+
+      // GridLayout, not Flow: a section may span rows as well as columns (a
+      // tile may be 2x2), and Flow cannot place a neighbour beside a two-row
+      // tile. Four units across, as in the design mock.
       GridLayout {
         id: grid
         width: parent.width
@@ -792,6 +896,19 @@ Panel {
             readonly property int rowspan: Number(modelData.rows) === 2 ? 2 : 1
 
             compact: span === 1 && rowspan === 1
+            draggable: true
+            removable: true
+            dropTarget: root.dropTargetId === modelData.id && root.draggingId !== ""
+            onRemoveRequested: root.setShown(modelData.id, false)
+            onDragStarted: function(x, y) {
+              var p = mapToItem(gridHost, x, y)
+              root.beginDrag(modelData.id, width, height, p.x, p.y)
+            }
+            onDragMoved: function(x, y) {
+              var p = mapToItem(gridHost, x, y)
+              root.moveDragAt(p.x, p.y)
+            }
+            onDragFinished: root.endDrag()
             Layout.columnSpan: span
             Layout.rowSpan: rowspan
             Layout.preferredWidth: Math.floor(span * grid.unit + (span - 1) * grid.columnSpacing)
@@ -822,6 +939,31 @@ Panel {
             }
 
             onHeldLong: root.openPage(modelData)
+          }
+        }
+      }
+
+        // The floating copy. The original stays in place at 25% so the grid
+        // does not reflow until the drop decides where it lands.
+        Item {
+          id: dragGhost
+          visible: root.draggingId !== ""
+          enabled: false
+          z: 100
+          width: root.dragW
+          height: root.dragH
+          x: root.dragX - width / 2
+          y: root.dragY - height / 2
+
+          Tile {
+            anchors.fill: parent
+            section: root.sectionMap[root.draggingId]
+            draggable: false
+            removable: false
+            compact: {
+              var e = root.catalogEntryById(root.draggingId)
+              return !!e && e.span === 1 && e.rows === 1
+            }
           }
         }
       }
@@ -866,7 +1008,7 @@ Panel {
           anchors.left: catalogBack.right
           anchors.leftMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
-          text: "Layout"
+          text: "Add a control"
           color: Color.foreground
           font.family: Style.font.family
           font.pixelSize: Style.font.title
@@ -911,7 +1053,7 @@ Panel {
         Text {
           width: parent.width
           anchors.verticalCenter: parent.verticalCenter
-          text: "Pick a control, then a size. Choosing a size puts it on the deck."
+          text: "Choose a control, then a size. Choosing a size puts it on the deck."
           color: Util.alpha(Color.foreground, 0.45)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption

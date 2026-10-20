@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0
+
+- **No edit mode.** The popup opens on the grid, as before. Tiles are direct:
+  drag one to reorder (a floating copy follows the pointer and the target
+  takes an accent outline), or press its `×` to remove it.
+- **`+` in the header** opens Add a control: choose a section, then a size,
+  and it is appended to the deck. The add page still lists the sections that
+  are already placed, so resizing never disappears.
+- Drag order is persisted in `layout.json` as `order`; a section keeps its
+  place when hidden and returns there when re-added.
+- IPC: `move(id, target)`.
+
 ## 0.3.1
 
 - The size page only offers **Remove from the deck** for a section that is

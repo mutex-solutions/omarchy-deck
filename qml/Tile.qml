@@ -25,6 +25,18 @@ Item {
   // once, so it renders icon-only and keeps the name in the tooltip.
   property bool compact: false
 
+  // Direct manipulation on the home grid: drag to reorder, × to remove. Both
+  // are part of the tile, not an editing mode.
+  property bool draggable: false
+  property bool dragging: false
+  property bool removable: false
+  property bool dropTarget: false
+
+  signal removeRequested()
+  signal dragStarted(real x, real y)
+  signal dragMoved(real x, real y)
+  signal dragFinished()
+
   // A section may supply its own tile body (the connectivity cluster is four
   // buttons, not one glyph). When it does, the host's default body and its
   // gesture are disabled so the custom controls receive the clicks.
@@ -32,6 +44,8 @@ Item {
 
   property bool hovered: false
   property bool didLongPress: false
+
+  opacity: tile.dragging ? 0.25 : 1.0
 
   // A custom tile draws its own body (the connectivity cluster is four
   // buttons), so the host's surface and border would just be a box around them.
@@ -165,6 +179,54 @@ Item {
     progress.width = 0
   }
 
+  // The tile under the pointer while something is being dragged.
+  Rectangle {
+    visible: tile.dropTarget
+    anchors.fill: parent
+    anchors.margins: -1
+    radius: Style.cornerRadius
+    color: "transparent"
+    border.width: 2
+    border.color: Util.alpha(Color.accent, 0.9)
+    z: 5
+  }
+
+  // × on a placed tile. Always visible: the user asked to be able to remove a
+  // tile directly, and a hidden-on-hover control is one you have to discover.
+  // It sits above the gesture MouseArea so its press never toggles the tile.
+  Rectangle {
+    id: removeButton
+    visible: tile.removable
+    width: tile.compact ? Style.space(14) : Style.space(16)
+    height: width
+    radius: width / 2
+    anchors.top: parent.top
+    anchors.right: parent.right
+    anchors.margins: Style.space(2)
+    color: removeMouse.containsMouse
+      ? Util.alpha(Color.urgent, 0.9)
+      : Util.alpha(Color.background, 0.88)
+    border.width: 1
+    border.color: Util.alpha(Color.foreground, 0.35)
+    z: 10
+
+    Text {
+      anchors.centerIn: parent
+      text: "×"
+      color: Color.foreground
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+    }
+
+    MouseArea {
+      id: removeMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: tile.removeRequested()
+    }
+  }
+
   MouseArea {
     anchors.fill: parent
     enabled: !tile.custom
@@ -176,17 +238,53 @@ Item {
     onEntered: tile.hovered = true
     onExited: tile.hovered = false
 
-    onPressed: {
+    property point pressPoint: Qt.point(0, 0)
+
+    function movedEnough(x, y) {
+      var dx = x - pressPoint.x
+      var dy = y - pressPoint.y
+      return Math.sqrt(dx * dx + dy * dy) >= 10
+    }
+
+    onPressed: function(mouse) {
       tile.didLongPress = false
+      pressPoint = Qt.point(mouse.x, mouse.y)
       holdTimer.start()
       showProgress.start()
     }
 
-    onReleased: {
+    onPositionChanged: function(mouse) {
+      if (!pressed) return
+      if (tile.dragging) {
+        tile.dragMoved(mouse.x, mouse.y)
+        return
+      }
+      if (!tile.draggable || !movedEnough(mouse.x, mouse.y)) return
+      // A drag is not a hold: cancel the hold before it can navigate away.
+      tile.endPress()
+      tile.dragging = true
+      tile.dragStarted(mouse.x, mouse.y)
+      tile.dragMoved(mouse.x, mouse.y)
+    }
+
+    onReleased: function(mouse) {
+      if (tile.dragging) {
+        tile.dragMoved(mouse.x, mouse.y)
+        tile.dragging = false
+        tile.dragFinished()
+        return
+      }
       tile.endPress()
       if (!tile.didLongPress) tile.toggled()
     }
 
-    onCanceled: tile.endPress()
+    onCanceled: function(mouse) {
+      if (tile.dragging) {
+        tile.dragging = false
+        tile.dragFinished()
+      } else {
+        tile.endPress()
+      }
+    }
   }
 }

@@ -41,29 +41,23 @@ registry in its own checkout, so `omarchy plugin update` stays clean.
 
 ## Arranging the grid
 
-The home grid is a surface, not an editor. **Edit** in its header opens the
-**Layout** page; everything about arranging happens there.
+The grid is the surface. There is no edit mode:
 
-- **On the grid** lists every section currently placed, each with a size chip
-  and `×` to remove it.
-- **Available** lists registered sections that are not placed, and the
-  first-party catalogue entries that are not installed yet.
-- A size chip opens the section's **size page**. It renders the real tile at
-  `1×1`, `2×1`, `4×1` and, for a custom tile, `2×2`, with the live section
-  inside. Choosing one puts it on the deck at that size; the grid is one press
-  away.
-- **Add from GitHub** takes a repository URL, runs `omarchy plugin add`, reads
-  the plugin's manifest, requires `deck/Section.qml`, and registers the
-  section in `sections.json`. Plugins run with your shell's permissions; only
-  install repositories you trust.
-- `catalog.json` in this repository is the preloaded list of first-party
-  sections. It is only a suggestion list; the registry says what exists.
+- **Drag a tile** to move it. The tile lifts, the one under the pointer takes
+  an accent outline, and dropping writes the new order.
+- **`×` on a tile** removes it from the grid. The section stays installed and
+  moves to the add page.
+- **`+` in the header** opens **Add a control**. Every section is listed;
+  choose one, then a size. The size page renders the real tile at `1×1`,
+  `2×1`, `4×1` and, for a custom component, `2×2`, with the live section
+  inside. Choosing a size puts it on the deck and returns to the grid.
+- Sections already on the deck are listed on the add page too, so their size
+  choices never disappear: choosing another size resizes in place.
 
-The arrangement is written to `~/.config/deck/layout.json`, not to
-`sections.json`, so `omarchy plugin update` and the bundle cannot overwrite
-it. Delete that file to return to the registry defaults. A registry entry
-marked `"hidden": true` is only a default: it can be placed from the Layout
-page, and it stays instantiated either way so its page is reachable.
+Order, sizes and visibility live in `~/.config/deck/layout.json`; the registry
+stays a catalogue. Delete the layout file to return to the registry defaults.
+A registry entry marked `"hidden": true` is only a default: it can be placed
+from the add page and stays instantiated either way so its page is reachable.
 
 The installer is `scripts/deck-add-section`; it can be run without the panel:
 
@@ -75,9 +69,10 @@ deck-add-section --id mutex-solutions.audio --section-id audio --title Audio
 The same actions are available over IPC for keybinds and scripts:
 
 ```bash
-omarchy-shell mutex-solutions.deck edit
-omarchy-shell mutex-solutions.deck choose audio     # the size page
+omarchy-shell mutex-solutions.deck edit          # the add page
+omarchy-shell mutex-solutions.deck choose audio  # the size page
 omarchy-shell mutex-solutions.deck setSize audio 4 1
+omarchy-shell mutex-solutions.deck move audio display
 omarchy-shell mutex-solutions.deck setShown wifi true
 omarchy-shell mutex-solutions.deck install https://github.com/user/omarchy-plugin
 omarchy-shell mutex-solutions.deck status
