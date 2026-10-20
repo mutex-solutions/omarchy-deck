@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2
+
+- The custom-tile progress bar is the standard accent bar again. The
+  connectivity block now uses the selected fill like any other tile, so it is
+  no longer bright enough to swallow an accent bar.
+
 ## 0.5.1
 
 - **Connectivity block is an optional section again**, for a compact 2x2
