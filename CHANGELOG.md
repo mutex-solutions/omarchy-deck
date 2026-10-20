@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.7
+
+- The bundle installs and registers **Tailscale** as a hidden section, so the
+  connectivity cluster's Tailscale radio can hold into its page without a
+  second tile for the same radio.
+
 ## 0.1.6
 
 - `host.open`: pages now know whether they are actually on screen. A page is

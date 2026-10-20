@@ -23,8 +23,8 @@ omarchy plugin add https://github.com/mutex-solutions/omarchy-deck --enable
 The panel appears in the bar as `▦`. With only the example section it looks like
 a single tile. That is expected.
 
-**Deck with the author's sections** (audio, Wi-Fi, Bluetooth, display, night
-light, lid awake):
+**Deck with the author's sections** (audio, Wi-Fi, Bluetooth, Tailscale,
+display, sessions, night light, lid awake):
 
 ```bash
 git clone https://github.com/mutex-solutions/omarchy-deck

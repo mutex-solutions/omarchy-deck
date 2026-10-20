@@ -55,6 +55,7 @@ SECTIONS=(
   "mutex-solutions.lid-awake|https://github.com/mutex-solutions/omarchy-lid-awake.git|Lid Awake|2"
   "mutex-solutions.wifi|https://github.com/mutex-solutions/omarchy-wifi.git|Wi-Fi|2|1|hidden"
   "mutex-solutions.bluetooth|https://github.com/mutex-solutions/omarchy-bluetooth.git|Bluetooth|2|1|hidden"
+  "mutex-solutions.tailscale|https://github.com/mutex-solutions/omarchy-tailscale.git|Tailscale|2|1|hidden"
 )
 
 installed() { [ -f "$PLUGINS/$1/manifest.json" ]; }
