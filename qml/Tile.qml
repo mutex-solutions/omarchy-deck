@@ -24,6 +24,10 @@ Item {
   // A 1-unit tile is a square and cannot hold a glyph and a legible label at
   // once, so it renders icon-only and keeps the name in the tooltip.
   property bool compact: false
+  // The grid size, so a section can supply a different body for each shape.
+  property int span: 2
+  property int rowspan: 1
+  property bool editing: false
 
   // Direct manipulation on the home grid: drag to reorder, × to remove. Both
   // are part of the tile, not an editing mode.
@@ -37,10 +41,21 @@ Item {
   signal dragMoved(real x, real y)
   signal dragFinished()
 
-  // A section may supply its own tile body (the connectivity cluster is four
-  // buttons, not one glyph). When it does, the host's default body and its
-  // gesture are disabled so the custom controls receive the clicks.
-  readonly property bool custom: !!(section && section.tileComponent)
+  // A section may supply a body for each size: tileCompact, tileHalf,
+  // tileFull, tileSquare. tileComponent remains the one-size fallback, and a
+  // section that supplies neither gets the default glyph, title and detail.
+  readonly property var sizedComponent: {
+    if (!section) return null
+    if (tile.compact) return section.tileCompact || section.tileComponent || null
+    if (tile.rowspan === 2) return section.tileSquare || section.tileComponent || null
+    if (tile.span >= 4) return section.tileFull || section.tileComponent || null
+    if (tile.span === 2) return section.tileHalf || section.tileComponent || null
+    return section.tileComponent || null
+  }
+
+  // A custom body owns its clicks, except while editing: then the host's
+  // gesture sits on top so the tile can still be dragged and held.
+  readonly property bool custom: !!sizedComponent
 
   property bool hovered: false
   property bool didLongPress: false
@@ -71,19 +86,38 @@ Item {
   // hit area subtly wrong.
   Loader {
     anchors.fill: parent
-    visible: tile.custom && !tile.compact
-    sourceComponent: tile.custom && tile.section ? tile.section.tileComponent : null
+    visible: tile.custom
+    sourceComponent: tile.sizedComponent
   }
 
-  // Compact size. This is what makes "small icon" offerable for every section,
-  // including one whose normal body is a custom component.
-  Text {
-    visible: tile.compact
-    anchors.centerIn: parent
-    text: tile.icon
-    color: tile.active ? Color.accent : Color.foreground
-    font.family: Style.font.family
-    font.pixelSize: Style.font.display
+  // Compact size: an icon with the title under it. The title is what makes a
+  // 1u tile recognisable without hovering; it elides rather than overflowing.
+  Item {
+    visible: tile.compact && !tile.custom
+    anchors.fill: parent
+    anchors.margins: Style.space(4)
+
+    Text {
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.verticalCenterOffset: -Style.space(6)
+      text: tile.icon
+      color: tile.active ? Color.accent : Color.foreground
+      font.family: Style.font.family
+      font.pixelSize: Style.font.display
+    }
+
+    Text {
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      horizontalAlignment: Text.AlignHCenter
+      text: tile.label
+      color: Util.alpha(Color.foreground, 0.65)
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      elide: Text.ElideRight
+    }
   }
 
   Item {
@@ -229,7 +263,7 @@ Item {
 
   MouseArea {
     anchors.fill: parent
-    enabled: !tile.custom
+    enabled: !tile.custom || tile.editing
     preventStealing: true
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton

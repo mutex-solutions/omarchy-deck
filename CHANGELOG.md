@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.0
+
+- **A section can look different at each size.** `tileCompact`, `tileHalf`,
+  `tileFull` and `tileSquare` are optional components; each falls back to
+  `tileComponent` and then to the default body. A section that only wants a
+  simple title supplies none. The size page renders the real component for
+  each size, so the preview is what the deck will show.
+- **1u tiles carry their title** under the icon, not just the glyph.
+- **Full tiles are more useful**: Audio 4x1 has a live volume slider and mute
+  button, Display lists each monitor with its resolution and rate, Sessions
+  lists each monitor's window count and workspace.
+- **Add a control is a tile** at the end of the grid in edit mode, full width,
+  as well as the header +. The size page's Remove is styled as destructive.
+- Custom tiles can be dragged while editing: the host gesture sits above a
+  custom body only in edit mode, so normal mode still gives the body its
+  clicks.
+- **New Deck mark in the bar**: a 2x2 control grid with one filled tile,
+  replacing the generic ▦ glyph.
+
 ## 0.5.2
 
 - The custom-tile progress bar is the standard accent bar again. The

@@ -816,11 +816,17 @@ Panel {
   }
 
   // ---- bar button -------------------------------------------------------
+  Component {
+    id: deckMark
+    DeckIcon { }
+  }
+
   BarIconButton {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "▦"
+    text: ""
+    iconComponent: deckMark
     onPressed: function(b) { root.toggle() }
   }
 
@@ -1022,15 +1028,18 @@ Panel {
           delegate: Tile {
             required property var modelData
 
-            // span is in grid units: 1 narrow, 2 half (default), 4 full row.
-            readonly property int span: {
+            // units are in grid columns: 1 narrow, 2 half (default), 4 full.
+            readonly property int unitSpan: {
               var n = Number(modelData.span)
               return (n === 1 || n === 2 || n === 4) ? n : 2
             }
-            // rows is 1 by default; 2 makes a 2x2 cluster tile.
-            readonly property int rowspan: Number(modelData.rows) === 2 ? 2 : 1
+            // rows is 1 by default; 2 makes a 2x2 tile.
+            readonly property int unitRows: Number(modelData.rows) === 2 ? 2 : 1
 
-            compact: span === 1 && rowspan === 1
+            compact: unitSpan === 1 && unitRows === 1
+            span: unitSpan
+            rowspan: unitRows
+            editing: root.editing
             draggable: root.editing
             removable: root.editing
             dropTarget: root.editing && root.dropTargetId === modelData.id
@@ -1045,10 +1054,10 @@ Panel {
               root.moveDragAt(p.x, p.y)
             }
             onDragFinished: root.endDrag()
-            Layout.columnSpan: span
-            Layout.rowSpan: rowspan
-            Layout.preferredWidth: Math.floor(span * grid.unit + (span - 1) * grid.columnSpacing)
-            Layout.preferredHeight: Math.floor(rowspan * grid.unit + (rowspan - 1) * grid.rowSpacing)
+            Layout.columnSpan: unitSpan
+            Layout.rowSpan: unitRows
+            Layout.preferredWidth: Math.floor(unitSpan * grid.unit + (unitSpan - 1) * grid.columnSpacing)
+            Layout.preferredHeight: Math.floor(unitRows * grid.unit + (unitRows - 1) * grid.rowSpacing)
             Layout.fillWidth: false
             Layout.fillHeight: false
 
@@ -1077,6 +1086,55 @@ Panel {
             onHeldLong: root.openPage(modelData)
           }
         }
+
+        // An explicit add tile at the end of the grid while editing. The
+        // header + still works; this one is visible in the place where a new
+        // control would land.
+        Rectangle {
+          visible: root.editing
+          Layout.columnSpan: 4
+          Layout.rowSpan: 1
+          Layout.preferredWidth: Math.floor(4 * grid.unit + 3 * grid.columnSpacing)
+          Layout.preferredHeight: Math.floor(grid.unit)
+          radius: Style.cornerRadius
+          color: addTileMouse.containsMouse
+            ? Util.alpha(Color.accent, Style.hoverFillAlpha)
+            : "transparent"
+          border.width: 1
+          border.color: Util.alpha(Color.foreground, 0.22)
+
+          Column {
+            anchors.centerIn: parent
+            spacing: Style.space(2)
+
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              text: "+"
+              color: Util.alpha(Color.foreground, 0.65)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.title
+            }
+
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              text: "Add a control"
+              color: Util.alpha(Color.foreground, 0.5)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+          }
+
+          MouseArea {
+            id: addTileMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              root.view = "catalog"
+              root.closePage()
+            }
+          }
+        }
       }
 
         // The floating copy. The original stays in place at 25% so the grid
@@ -1099,6 +1157,14 @@ Panel {
             compact: {
               var e = root.catalogEntryById(root.draggingId)
               return !!e && e.span === 1 && e.rows === 1
+            }
+            span: {
+              var e = root.catalogEntryById(root.draggingId)
+              return e ? e.span : 2
+            }
+            rowspan: {
+              var e = root.catalogEntryById(root.draggingId)
+              return e ? e.rows : 1
             }
           }
         }
@@ -1656,6 +1722,8 @@ Panel {
                 anchors.fill: parent
                 anchors.margins: 2
                 section: sizeOption.sectionItem
+                span: sizeOption.modelData.span
+                rowspan: sizeOption.modelData.rows
                 compact: sizeOption.modelData.span === 1 && sizeOption.modelData.rows === 1
               }
 
@@ -1688,13 +1756,13 @@ Panel {
             color: sizeRemoveMouse.containsMouse
               ? Util.alpha(Color.urgent, 0.12) : "transparent"
             border.width: 1
-            border.color: Util.alpha(Color.foreground, 0.3)
+            border.color: Util.alpha(Color.urgent, 0.45)
 
             Text {
               id: sizeRemoveText
               anchors.centerIn: parent
               text: "Remove from the deck"
-              color: Color.foreground
+              color: Color.urgent
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
             }

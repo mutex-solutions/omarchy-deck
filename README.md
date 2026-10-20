@@ -46,6 +46,10 @@ section's page. Nothing can be added, removed, resized or moved.
 
 **Edit** in the header turns on direct manipulation:
 
+- Tiles can look different at each size. A section may supply `tileCompact`,
+  `tileHalf`, `tileFull` and `tileSquare`; the default body is icon, title and
+  detail. Audio's 4x1 tile adds a volume slider, Display lists its monitors,
+  and Sessions lists windows per monitor.
 - **Drag a tile** to move it. The original dims, a floating copy follows the
   pointer, and the tile under it takes an accent outline. Dropping writes the
   new order.

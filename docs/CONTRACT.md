@@ -43,7 +43,11 @@ Required:
 | `detail` | string | tile second line |
 | `icon` | string | glyph |
 | `toggle()` | function | optional: what a click does. **Omit it when the section has no single on/off** (Display arranges several monitors); Deck then treats a click as "open the page", so the gesture is never dead. |
-| `tileComponent` | `Component` | optional: replaces the default tile body (the connectivity cluster is four buttons) |
+| `tileComponent` | `Component` | optional: a body for every size |
+| `tileCompact` | `Component` | optional: the 1x1 body, falling back to `tileComponent` |
+| `tileHalf` | `Component` | optional: the 2x1 body, falling back to `tileComponent` |
+| `tileFull` | `Component` | optional: the 4x1 body, falling back to `tileComponent` |
+| `tileSquare` | `Component` | optional: the 2x2 body, falling back to `tileComponent` |
 | `notice` | object | optional: `{ severity: "info" \| "urgent", title, detail }`; Deck draws it in the shared strip |
 
 ## Page.qml
@@ -52,6 +56,11 @@ Required:
 | --- | --- | --- |
 | `section` | var | injected: the live section instance |
 | `host` | var | injected: `{ open, close(), notify(text) }` |
+
+A custom body owns its own clicks. While the deck is in edit mode the host
+gesture sits above it, so the tile can still be dragged and held. A section
+with none of the four size components gets Deck's default body: icon, title
+and detail, or icon and title at 1x1.
 
 The page renders content only. The host draws the back button, the title, and
 the frame. A page that draws its own back button is a contract violation.
