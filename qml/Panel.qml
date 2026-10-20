@@ -229,7 +229,7 @@ Panel {
           onLoaded: root.registerSection(modelData.id, item)
           onStatusChanged: {
             if (status === Loader.Error)
-              console.warn("deck: failed to load section", modelData.id, hiddenLoader.errorString())
+              console.warn("deck: failed to load section", modelData.id, hiddenLoader.errorString)
           }
         }
       }
@@ -283,7 +283,7 @@ Panel {
               onLoaded: root.registerSection(modelData.id, item)
               onStatusChanged: {
                 if (status === Loader.Error)
-                  console.warn("deck: failed to load section", modelData.id, sectionLoader.errorString())
+                  console.warn("deck: failed to load section", modelData.id, sectionLoader.errorString)
               }
             }
 
@@ -449,7 +449,7 @@ Panel {
           }
             onStatusChanged: {
               if (status === Loader.Error)
-                console.warn("deck: failed to load page", root.pageSource, pageLoader.errorString())
+                console.warn("deck: failed to load page", root.pageSource, pageLoader.errorString)
             }
           }
         }

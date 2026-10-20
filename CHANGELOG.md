@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5
+
+- `Loader.errorString` is a property, not a function. A section that failed to
+  load took the deck log down with a TypeError instead of naming the file.
+  Both the tile and hidden-section loaders, and the page loader, now read the
+  property.
+
 ## 0.1.4
 
 - The bundle wires the **Sessions** section, for moving windows, workspaces
