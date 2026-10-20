@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- The size page only offers **Remove from the deck** for a section that is
+  actually on the deck. An Available section's page is a place to add it.
+
 ## 0.3.0
 
 - **Arranging is a page, not a mode on the grid.** Edit opens the Layout page:

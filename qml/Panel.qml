@@ -1258,7 +1258,7 @@ Panel {
           height: Style.space(24)
 
           Rectangle {
-            visible: !!sizeView.entry
+            visible: !!sizeView.entry && sizeView.entry.shown
             anchors.left: parent.left
             width: sizeRemoveText.implicitWidth + Style.space(16)
             height: Style.space(20)
