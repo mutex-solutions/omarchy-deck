@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+#
+# Add a Deck section from a git URL, or register a plugin that is already
+# installed (the embedded catalog knows its id, so no clone is needed).
+#
+# One JSON object on stdout, always. Exit 0 only when the registry was written.
+#
+#   deck-add-section https://github.com/user/omarchy-thing
+#   deck-add-section --id mutex-solutions.audio --title Audio
+#
+# The plugin is cloned with `omarchy plugin add --yes`, then its manifest is
+# read for the id and name, its deck/Section.qml is required, and its entry is
+# merged into ~/.config/deck/sections.json. Registration is one atomic rename:
+# a failure leaves the old registry intact.
+
+set -euo pipefail
+
+PLUGINS="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins"
+USER_REG="${XDG_CONFIG_HOME:-$HOME/.config}/deck/sections.json"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+BUNDLED="$SCRIPT_DIR/../sections.json"
+
+URL=""
+WANT_ID=""
+WANT_TITLE=""
+WANT_SECTION_ID=""
+
+usage() {
+  sed -n '3,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
+
+while (($# > 0)); do
+  case "$1" in
+    --id)         WANT_ID="${2:?--id needs a value}"; shift 2 ;;
+    --section-id) WANT_SECTION_ID="${2:?--section-id needs a value}"; shift 2 ;;
+    --title)      WANT_TITLE="${2:?--title needs a value}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    --*) echo "deck-add-section: unknown option $1" >&2; exit 2 ;;
+    *)   URL="$1"; shift ;;
+  esac
+done
+
+json_fail() {
+  jq -nc --arg error "$1" '{ok:false, error:$error}' 2>/dev/null \
+    || printf '{"ok":false,"error":"%s"}\n' "$1"
+  exit 1
+}
+
+command -v jq >/dev/null || json_fail "jq is required"
+command -v omarchy >/dev/null || json_fail "omarchy is required"
+
+DIR=""
+
+# A catalog entry can name the plugin id even when the plugin is already
+# installed as a bar widget. That is the no-network path.
+if [[ -n $WANT_ID && -f "$PLUGINS/$WANT_ID/manifest.json" ]]; then
+  DIR="$PLUGINS/$WANT_ID"
+fi
+
+if [[ -z $DIR ]]; then
+  [[ -n $URL ]] || json_fail "a git URL is required for a section that is not installed"
+  case "$URL" in
+    https://github.com/*|http://github.com/*|git@github.com:*) ;;
+    *) json_fail "only GitHub URLs are accepted" ;;
+  esac
+
+  before="$(mktemp)"
+  after="$(mktemp)"
+  trap 'rm -f "$before" "$after"' EXIT
+  list_dirs() {
+    find "$PLUGINS" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null \
+      | grep -v '^\.add\.tmp' | sort
+  }
+  list_dirs > "$before"
+
+  # `omarchy plugin add` exits non-zero for a plugin that is already installed.
+  # That is not an error for this command: the fallback below finds the clone
+  # by its git origin and registers it. The output is kept for the failure
+  # path, where it explains why nothing was installed.
+  ADD_OUT=""
+  ADD_RC=0
+  ADD_OUT="$(omarchy plugin add "$URL" --yes 2>&1)" || ADD_RC=$?
+
+  list_dirs > "$after"
+  # `head -1` closes the pipe early; with pipefail that is a 141 exit and
+  # `set -e` would abort the script before the fallback lookup runs.
+  NEW="$(comm -13 "$before" "$after" | grep -v '^\.add\.tmp' | head -1 || true)"
+
+  # Already cloned: find the directory whose origin is this URL. This is the
+  # path taken when someone presses Add for a plugin they installed earlier.
+  if [[ -z $NEW ]]; then
+    for d in "$PLUGINS"/*; do
+      [[ -f "$d/manifest.json" ]] || continue
+      origin="$(git -C "$d" remote get-url origin 2>/dev/null || true)"
+      origin="${origin%.git}"
+      target="${URL%.git}"
+      if [[ -n $origin && "$origin" == "$target" ]]; then
+        NEW="$(basename "$d")"
+        break
+      fi
+    done
+  fi
+
+  if [[ -z $NEW ]]; then
+    json_fail "install failed: $(printf '%s' "$ADD_OUT" | tail -2 | tr '\n' ' ')"
+  fi
+  [[ -f "$PLUGINS/$NEW/manifest.json" ]] \
+    || json_fail "the plugin did not install a manifest"
+  DIR="$PLUGINS/$NEW"
+fi
+
+ID="$(jq -r '.id // empty' "$DIR/manifest.json" 2>/dev/null || true)"
+[[ -n $ID ]] || json_fail "the plugin manifest has no id"
+
+TITLE="${WANT_TITLE:-$(jq -r '.name // empty' "$DIR/manifest.json" 2>/dev/null || true)}"
+[[ -n $TITLE ]] || TITLE="$ID"
+
+SECTION="$DIR/deck/Section.qml"
+PAGE="$DIR/deck/Page.qml"
+[[ -f $SECTION ]] || json_fail "this plugin has no Deck section (deck/Section.qml)"
+
+PAGE_ARG=""
+[[ -f $PAGE ]] && PAGE_ARG="$PAGE"
+
+# Build from the user registry when it exists, otherwise from the bundle's, so
+# adding the first custom section does not drop everything already installed.
+tmp="$(mktemp)"
+trap 'rm -f "$tmp" "$tmp.new"' EXIT
+if [[ -f $USER_REG ]]; then
+  cp "$USER_REG" "$tmp"
+elif [[ -f $BUNDLED ]]; then
+  cp "$BUNDLED" "$tmp"
+else
+  printf '{"sections":[]}\n' > "$tmp"
+fi
+
+jq -e . "$tmp" >/dev/null 2>&1 || json_fail "the registry is not valid JSON"
+
+# The registry keys entries by a short section id ("audio"), not by the
+# plugin id ("mutex-solutions.audio"). Reuse the id of an entry that already
+# points at this section file, so re-adding the same plugin updates in place.
+EXISTING_ID="$(jq -r --arg file "$SECTION" \
+  '[.sections[] | select(.file == $file) | .id] | first // empty' "$tmp")"
+ENTRY_ID="${EXISTING_ID:-${WANT_SECTION_ID:-$(printf '%s' "$ID" | awk -F. '{print $NF}')}}"
+
+# A different section may already own that short id. Keep the full plugin id
+# rather than replacing an unrelated control.
+OWNER="$(jq -r --arg sid "$ENTRY_ID" --arg file "$SECTION" \
+  '[.sections[] | select(.id == $sid and .file != $file) | .file] | first // empty' "$tmp")"
+if [[ -n $OWNER ]]; then
+  ENTRY_ID="$ID"
+fi
+
+jq --arg id "$ENTRY_ID" --arg title "$TITLE" --arg file "$SECTION" --arg page "$PAGE_ARG" '
+  (.sections // []) as $sections
+  | ($sections | map(select(.id == $id or .file == $file)) | first) as $old
+  | (($old // {}) + { id: $id, title: $title, file: $file }
+     + (if $page == "" then {} else { page: $page } end)
+     + { span: (($old.span) // 2), rows: (($old.rows) // 1) }) as $entry
+  # Replace in place when the section is already registered; appending would
+  # silently reorder the grid every time a user re-added something.
+  | .sections = (if $old then
+      ($sections | map(if (.id == $id or .file == $file) then $entry else . end))
+    else
+      ($sections + [$entry])
+    end)
+' "$tmp" > "$tmp.new" || json_fail "the registry could not be written"
+
+mkdir -p "$(dirname "$USER_REG")"
+mv "$tmp.new" "$USER_REG"
+
+jq -nc --arg id "$ENTRY_ID" --arg pluginId "$ID" --arg title "$TITLE" \
+  --arg file "$SECTION" --arg page "$PAGE_ARG" \
+  '{ok:true, id:$id, pluginId:$pluginId, title:$title, file:$file, page:$page}'

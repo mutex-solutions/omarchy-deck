@@ -41,24 +41,46 @@ registry in its own checkout, so `omarchy plugin update` stays clean.
 
 ## Arranging the grid
 
-The panel header has an **Edit** button. In arrange mode:
+The home grid is a surface, not an editor. **Edit** in its header opens the
+**Layout** page; everything about arranging happens there.
 
-- every tile gets `×` (remove) and a size chip;
-- the chip cycles `1×1` (icon only), `2×1` (half), `4×1` (full), `2×2`;
-- **Add a control** lists every registered section that is not on the grid.
+- **On the grid** lists every section currently placed, each with a size chip
+  and `×` to remove it.
+- **Available** lists registered sections that are not placed, and the
+  first-party catalogue entries that are not installed yet.
+- A size chip opens the section's **size page**. It renders the real tile at
+  `1×1`, `2×1`, `4×1` and, for a custom tile, `2×2`, with the live section
+  inside. Choosing one puts it on the deck at that size; the grid is one press
+  away.
+- **Add from GitHub** takes a repository URL, runs `omarchy plugin add`, reads
+  the plugin's manifest, requires `deck/Section.qml`, and registers the
+  section in `sections.json`. Plugins run with your shell's permissions; only
+  install repositories you trust.
+- `catalog.json` in this repository is the preloaded list of first-party
+  sections. It is only a suggestion list; the registry says what exists.
 
-The result is written to `~/.config/deck/layout.json`, not to
+The arrangement is written to `~/.config/deck/layout.json`, not to
 `sections.json`, so `omarchy plugin update` and the bundle cannot overwrite
-the arrangement. Delete that file to return to the registry defaults. A
-registry entry marked `"hidden": true` is only a default; it can be added from
-arrange mode, and it stays instantiated either way so its page is reachable.
+it. Delete that file to return to the registry defaults. A registry entry
+marked `"hidden": true` is only a default: it can be placed from the Layout
+page, and it stays instantiated either way so its page is reachable.
+
+The installer is `scripts/deck-add-section`; it can be run without the panel:
+
+```bash
+deck-add-section https://github.com/user/omarchy-plugin
+deck-add-section --id mutex-solutions.audio --section-id audio --title Audio
+```
 
 The same actions are available over IPC for keybinds and scripts:
 
 ```bash
 omarchy-shell mutex-solutions.deck edit
+omarchy-shell mutex-solutions.deck choose audio     # the size page
 omarchy-shell mutex-solutions.deck setSize audio 4 1
 omarchy-shell mutex-solutions.deck setShown wifi true
+omarchy-shell mutex-solutions.deck install https://github.com/user/omarchy-plugin
+omarchy-shell mutex-solutions.deck status
 ```
 
 ## The contract in one screen

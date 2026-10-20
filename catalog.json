@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "sections": [
+    {
+      "id": "mutex-solutions.audio",
+      "title": "Audio",
+      "icon": "󰕾",
+      "repo": "https://github.com/mutex-solutions/omarchy-audio",
+      "description": "Output, microphone, per-app streams and Bluetooth codec",
+      "sectionId": "audio"
+    },
+    {
+      "id": "mutex-solutions.display",
+      "title": "Display",
+      "icon": "☼",
+      "repo": "https://github.com/mutex-solutions/omarchy-display",
+      "description": "Arrangement, resolution, scale, rate and brightness",
+      "sectionId": "display"
+    },
+    {
+      "id": "mutex-solutions.sessions",
+      "title": "Sessions",
+      "icon": "▤",
+      "repo": "https://github.com/mutex-solutions/omarchy-sessions",
+      "description": "Move windows, workspaces and sessions between displays",
+      "sectionId": "sessions"
+    },
+    {
+      "id": "mutex-solutions.nightlight",
+      "title": "Night light",
+      "icon": "☾",
+      "repo": "https://github.com/mutex-solutions/omarchy-nightlight",
+      "description": "Warm the screen after dark",
+      "sectionId": "nightlight"
+    },
+    {
+      "id": "mutex-solutions.lid-awake",
+      "title": "Lid Awake",
+      "icon": "▭",
+      "repo": "https://github.com/mutex-solutions/omarchy-lid-awake",
+      "description": "Keep the machine awake with the lid closed",
+      "sectionId": "lid-awake"
+    },
+    {
+      "id": "mutex-solutions.wifi",
+      "title": "Wi-Fi",
+      "icon": "󰤨",
+      "repo": "https://github.com/mutex-solutions/omarchy-wifi",
+      "description": "Networks, scanning and the current connection",
+      "sectionId": "wifi"
+    },
+    {
+      "id": "mutex-solutions.bluetooth",
+      "title": "Bluetooth",
+      "icon": "󰂯",
+      "repo": "https://github.com/mutex-solutions/omarchy-bluetooth",
+      "description": "Devices, pairing and audio routing",
+      "sectionId": "bluetooth"
+    },
+    {
+      "id": "mutex-solutions.tailscale",
+      "title": "Tailscale",
+      "icon": "⬡",
+      "repo": "https://github.com/mutex-solutions/omarchy-tailscale",
+      "description": "Tailnet status, machines, exit nodes and accounts",
+      "sectionId": "tailscale"
+    }
+  ]
+}

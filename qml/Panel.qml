@@ -37,14 +37,26 @@ Panel {
   property var registrySections: []
   property var layout: ({})
 
+  // The embedded catalog of first-party sections. It is only a list of what
+  // can be installed; the registry is what is actually installed.
+  property var catalog: []
+
+  // The size page is for one section: chooserId names it.
+  property string chooserId: ""
+  property bool installing: false
+  property string installStatus: ""
+  property string installError: ""
+  property string _installOut: ""
+  property string _installErr: ""
+
   readonly property string layoutPath: Quickshell.env("HOME") + "/.config/deck/layout.json"
 
   // every arrangement a tile may take, in the order the size chip cycles
   readonly property var sizeChoices: [
-    { label: "1×1", span: 1, rows: 1 },
-    { label: "2×1", span: 2, rows: 1 },
-    { label: "4×1", span: 4, rows: 1 },
-    { label: "2×2", span: 2, rows: 2 }
+    { label: "1×1", sub: "1u", span: 1, rows: 1 },
+    { label: "2×1", sub: "Half", span: 2, rows: 1 },
+    { label: "4×1", sub: "Full", span: 4, rows: 1 },
+    { label: "2×2", sub: "Square", span: 2, rows: 2 }
   ]
 
   // Registry order, with the user's shown/span/rows applied. A registry entry
@@ -77,10 +89,115 @@ Panel {
   readonly property var gridSections: allSections.filter(function(s) { return s.shown })
   readonly property var hiddenSections: allSections.filter(function(s) { return !s.shown })
 
-  function sectionEntry(id) {
-    for (var i = 0; i < allSections.length; i++)
-      if (allSections[i].id === String(id)) return allSections[i]
+  function findCatalogEntry(sectionId) {
+    for (var i = 0; i < catalog.length; i++) {
+      var e = catalog[i]
+      var sid = String(e.sectionId || String(e.id || "").split(".").pop())
+      if (sid === String(sectionId)) return e
+    }
     return null
+  }
+
+  // One row per section a user can put on the grid: registered sections in
+  // registry order, then catalog entries that are not installed yet. A
+  // section already on the grid is still here, with its size choices, which
+  // is the point: arrange mode is a catalogue, not an "add the missing ones"
+  // list.
+  readonly property var catalogEntries: {
+    var out = []
+    var seen = ({})
+    for (var i = 0; i < allSections.length; i++) {
+      var s = allSections[i]
+      var c = findCatalogEntry(s.id)
+      var live = sectionMap[String(s.id)]
+      out.push({
+        id: s.id,
+        title: s.title,
+        pluginId: c ? String(c.id) : "",
+        repo: c ? String(c.repo || "") : "",
+        description: c ? String(c.description || "") : "",
+        glyph: live && live.icon !== undefined && String(live.icon) !== ""
+          ? String(live.icon) : (c && c.icon ? String(c.icon) : "▦"),
+        installed: true,
+        shown: s.shown,
+        span: s.span,
+        rows: s.rows,
+        custom: !!(live && live.tileComponent) || s.rows === 2
+      })
+      seen[String(s.id)] = true
+    }
+    for (var j = 0; j < catalog.length; j++) {
+      var e = catalog[j]
+      var id = String(e.sectionId || String(e.id || "").split(".").pop())
+      if (seen[id]) continue
+      out.push({
+        id: id,
+        title: String(e.title || e.id || id),
+        pluginId: String(e.id || ""),
+        repo: String(e.repo || ""),
+        description: String(e.description || ""),
+        glyph: String(e.icon || "▦"),
+        installed: false,
+        shown: false,
+        span: 2,
+        rows: 1,
+        custom: false
+      })
+    }
+    return out
+  }
+
+  readonly property var onGridEntries: catalogEntries.filter(function(e) { return e.shown })
+  readonly property var availableEntries: catalogEntries.filter(function(e) { return !e.shown })
+
+  function catalogEntryById(id) {
+    for (var i = 0; i < catalogEntries.length; i++)
+      if (catalogEntries[i].id === String(id)) return catalogEntries[i]
+    return null
+  }
+
+  // The three sizes the owner named, plus 2x2 only where a tile is a custom
+  // component that needs the height (the connectivity cluster).
+  function sizeChoicesFor(entry) {
+    var out = []
+    for (var i = 0; i < sizeChoices.length; i++) {
+      var c = sizeChoices[i]
+      if (c.rows === 2 && !(entry && (entry.custom || entry.rows === 2))) continue
+      out.push(c)
+    }
+    return out
+  }
+
+  function applySize(id, span, rows) {
+    updateLayout(id, { shown: true, span: span, rows: rows })
+  }
+
+  function reloadRegistry() {
+    root.userRegistryPresent = true
+    userRegistry.reload()
+  }
+
+  function installSection(url, pluginId, sectionId, title) {
+    url = String(url || "").trim()
+    if (installing) return
+    if (url === "" && String(pluginId || "") === "") {
+      installError = "Paste a GitHub URL first"
+      return
+    }
+    installing = true
+    installStatus = ""
+    installError = ""
+    _installOut = ""
+    _installErr = ""
+    var cmd = ["bash", root.pluginDir + "/scripts/deck-add-section"]
+    if (pluginId) cmd = cmd.concat(["--id", String(pluginId)])
+    // The catalog knows the registry key; a pasted URL does not, and the
+    // helper then reuses an existing entry or derives one from the manifest.
+    if (sectionId) cmd = cmd.concat(["--section-id", String(sectionId)])
+    if (title) cmd = cmd.concat(["--title", String(title)])
+    if (url !== "") cmd.push(url)
+    installProc.command = cmd
+    installProc.running = true
   }
 
   function sizeLabelFor(entry) {
@@ -113,16 +230,6 @@ Panel {
     updateLayout(id, { shown: shown === true })
   }
 
-  function cycleSize(id) {
-    var entry = sectionEntry(id)
-    if (!entry) return
-    var index = -1
-    for (var i = 0; i < sizeChoices.length; i++)
-      if (sizeChoices[i].span === entry.span && sizeChoices[i].rows === entry.rows)
-        index = i
-    var next = sizeChoices[(index + 1) % sizeChoices.length]
-    updateLayout(id, { span: next.span, rows: next.rows })
-  }
   // id -> loaded section item, so an IPC call or keybind can drive a section
   // without the panel being open.
   property var sectionMap: ({})
@@ -142,7 +249,10 @@ Panel {
   property string pageTitle: ""
   property string pageSectionId: ""
   readonly property bool pageOpen: pageSource !== ""
-  property bool editing: false
+  // grid: the home surface. catalog: the list of every control. size: the
+  // full previews for one control. Editing is a place you go, not a mode the
+  // grid wears.
+  property string view: "grid"
 
   // Handed to every page. close() is the only navigation a page may trigger;
   // notify() is a one-line message on the notice strip.
@@ -219,7 +329,7 @@ Panel {
     }
     function back() { root.closePage() }
     function edit() {
-      root.editing = true
+      root.view = "catalog"
       root.closePage()
       root.open()
     }
@@ -229,6 +339,25 @@ Panel {
     }
     function setShown(id: string, shown: bool) {
       root.setShown(id, shown)
+    }
+    function choose(id: string) {
+      root.view = "size"
+      root.chooserId = String(id)
+      root.closePage()
+      root.open()
+    }
+    // Scriptable install and a readable result, for a keybind or a test.
+    function install(url: string) {
+      root.view = "catalog"
+      root.installSection(String(url), "", "", "")
+    }
+    function status(): string {
+      if (root.installing) return "installing"
+      return root.installError !== "" ? root.installError : root.installStatus
+    }
+    function home() {
+      root.view = "grid"
+      root.chooserId = ""
     }
   }
 
@@ -289,6 +418,211 @@ Panel {
     }
   }
 
+  // The embedded catalogue: first-party sections and where to get them. It is
+  // a suggestion list, not a registry; the registry above says what exists.
+  FileView {
+    id: catalogFile
+    path: root.pluginDir + "/catalog.json"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      try {
+        var parsed = JSON.parse(text() || "{}")
+        root.catalog = parsed.sections || []
+      } catch (e) {
+        console.warn("deck: catalog.json is not valid JSON:", e)
+      }
+    }
+  }
+
+  // ---- section install --------------------------------------------------
+  //
+  // The helper does the transactional part: clone, read the manifest, require
+  // deck/Section.qml, merge one entry into the registry with an atomic rename,
+  // and print one JSON object. A failed registration leaves the old registry
+  // untouched and the plugin installed but unused, which is recoverable.
+  Process {
+    id: installProc
+    command: []
+
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root._installOut = String(text || "")
+    }
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root._installErr = String(text || "")
+    }
+
+    onExited: function(code) {
+      root.installing = false
+      var result = null
+      try { result = JSON.parse(root._installOut || "{}") } catch (e) {}
+
+      if (code === 0 && result && result.ok === true) {
+        root.installStatus = "Added " + String(result.title || result.id || "section")
+        root.reloadRegistry()
+        if (result.id) root.setShown(String(result.id), true)
+        return
+      }
+
+      var message = result && result.error ? String(result.error)
+        : (root._installErr || root._installOut || "Install failed")
+      root.installError = message.trim()
+    }
+  }
+
+  // One catalogue row. Every registered section is here, on the grid or not;
+  // its size chip opens the full previews. A section that is already placed
+  // must not lose its choices just because it is on the deck.
+  component CatalogRow: Item {
+    id: row
+
+    property var entry: null
+    property bool onGrid: false
+
+    signal removeRequested()
+    signal installRequested()
+    signal sizeRequested()
+
+    width: parent ? parent.width : 0
+    height: Style.space(34)
+
+    readonly property bool canSize: !!entry && entry.installed === true
+
+    Column {
+      anchors.left: parent.left
+      anchors.leftMargin: Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
+      width: Math.max(0, row.width
+        - (sizeChip.visible ? sizeChip.width : 0)
+        - (removeChip.visible ? removeChip.width : 0)
+        - (installChip.visible ? installChip.width : 0)
+        - Style.space(30))
+      spacing: 0
+
+      Text {
+        width: parent.width
+        text: row.entry ? row.entry.title : ""
+        color: Color.foreground
+        font.family: Style.font.family
+        font.pixelSize: Style.font.body
+        font.bold: row.onGrid
+        elide: Text.ElideRight
+      }
+
+      Text {
+        width: parent.width
+        text: row.onGrid ? "On the grid" : (row.canSize ? "Installed" : "Not installed")
+        color: Util.alpha(Color.foreground, 0.45)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        elide: Text.ElideRight
+      }
+    }
+
+    // The size is a door, not a set of thumbnails. Pressing it opens the full
+    // previews; the grid stays a grid.
+    Rectangle {
+      id: sizeChip
+      visible: row.canSize
+      anchors.right: removeChip.left
+      anchors.rightMargin: row.onGrid ? Style.space(6) : Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
+      width: sizeText.implicitWidth + Style.space(16)
+      height: Style.space(20)
+      radius: Style.cornerRadius
+      color: sizeMouse.containsMouse
+        ? Util.alpha(Color.accent, Style.hoverFillAlpha) : "transparent"
+      border.width: 1
+      border.color: Util.alpha(Color.accent, 0.45)
+
+      Text {
+        id: sizeText
+        anchors.centerIn: parent
+        text: row.onGrid
+          ? root.sizeLabelFor(row.entry) + "  ▾"
+          : "Add  ▾"
+        color: Color.accent
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+      }
+
+      MouseArea {
+        id: sizeMouse
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: row.sizeRequested()
+      }
+    }
+
+    Rectangle {
+      id: removeChip
+      visible: row.onGrid
+      anchors.right: parent.right
+      anchors.rightMargin: Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
+      width: removeText.implicitWidth + Style.space(12)
+      height: Style.space(20)
+      radius: Style.cornerRadius
+      color: removeMouse.containsMouse
+        ? Util.alpha(Color.urgent, 0.12) : "transparent"
+      border.width: 1
+      border.color: Util.alpha(Color.foreground, 0.3)
+
+      Text {
+        id: removeText
+        anchors.centerIn: parent
+        text: "×"
+        color: Util.alpha(Color.foreground, 0.8)
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+      }
+
+      MouseArea {
+        id: removeMouse
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: row.removeRequested()
+      }
+    }
+
+    Rectangle {
+      id: installChip
+      visible: !row.canSize
+      anchors.right: parent.right
+      anchors.rightMargin: Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
+      width: installText.implicitWidth + Style.space(14)
+      height: Style.space(20)
+      radius: Style.cornerRadius
+      color: installMouse.containsMouse
+        ? Util.alpha(Color.accent, Style.hoverFillAlpha) : "transparent"
+      border.width: 1
+      border.color: Util.alpha(Color.foreground, 0.3)
+
+      Text {
+        id: installText
+        anchors.centerIn: parent
+        text: "Install"
+        color: Color.foreground
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+      }
+
+      MouseArea {
+        id: installMouse
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: row.installRequested()
+      }
+    }
+  }
+
   // ---- bar button -------------------------------------------------------
   BarIconButton {
     id: button
@@ -311,14 +645,22 @@ Panel {
     // adding padding here as well leaves a dead band under the content.
     // Arrange mode shows the size controls and the add list under the grid;
     // give it the extra room rather than clipping the last control.
-    contentHeight: panel.fittedContentHeight(content.implicitHeight,
-      root.editing ? Style.space(660) : Style.space(560))
+    // A minimum matters because the content is inside a ScrollView: before the
+    // popup has a width the grid's implicitHeight is 0, and a zero-height popup
+    // is closed by the host before it can lay out.
+    contentHeight: Math.max(
+      root.view === "grid" ? Style.space(180) : Style.space(360),
+      panel.fittedContentHeight(content.implicitHeight,
+        root.view === "grid" ? Style.space(560) : Style.space(660)))
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
       onCloseRequested: {
+        // Esc walks back through the layout pages before it closes the panel.
         if (root.pageOpen) root.closePage()
+        else if (root.view === "size") root.view = "catalog"
+        else if (root.view === "catalog") root.view = "grid"
         else root.close()
       }
       onActivateRequested: root.close()
@@ -367,7 +709,7 @@ Panel {
       Item {
         width: parent.width
         height: Style.space(22)
-        visible: !root.pageOpen
+        visible: !root.pageOpen && root.view === "grid"
 
         Text {
           id: deckTitle
@@ -378,16 +720,6 @@ Panel {
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.letterSpacing: 1.5
-        }
-
-        Text {
-          anchors.left: deckTitle.right
-          anchors.leftMargin: Style.space(8)
-          anchors.verticalCenter: parent.verticalCenter
-          text: root.editing ? "arrange" : ""
-          color: Util.alpha(Color.accent, 0.8)
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
         }
 
         Rectangle {
@@ -401,13 +733,13 @@ Panel {
             ? Util.alpha(Color.accent, Style.hoverFillAlpha)
             : "transparent"
           border.width: 1
-          border.color: Util.alpha(root.editing ? Color.accent : Color.foreground, 0.32)
+          border.color: Util.alpha(Color.foreground, 0.32)
 
           Text {
             id: editText
             anchors.centerIn: parent
-            text: root.editing ? "Done" : "Edit"
-            color: root.editing ? Color.accent : Color.foreground
+            text: "Edit"
+            color: Color.foreground
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
           }
@@ -418,8 +750,8 @@ Panel {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: {
-              root.editing = !root.editing
-              if (root.editing) root.closePage()
+              root.view = "catalog"
+              root.closePage()
             }
           }
         }
@@ -428,7 +760,7 @@ Panel {
       Rectangle {
         width: parent.width
         height: 1
-        visible: !root.pageOpen
+        visible: !root.pageOpen && root.view === "grid"
         color: Util.alpha(Color.foreground, 0.1)
       }
 
@@ -439,7 +771,7 @@ Panel {
       GridLayout {
         id: grid
         width: parent.width
-        visible: !root.pageOpen
+        visible: !root.pageOpen && root.view === "grid"
         columns: 4
         columnSpacing: Style.space(9)
         rowSpacing: Style.space(9)
@@ -460,10 +792,6 @@ Panel {
             readonly property int rowspan: Number(modelData.rows) === 2 ? 2 : 1
 
             compact: span === 1 && rowspan === 1
-            editing: root.editing
-            sizeLabel: root.sizeLabelFor(modelData)
-            onRemoveRequested: root.setShown(modelData.id, false)
-            onSizeRequested: root.cycleSize(modelData.id)
             Layout.columnSpan: span
             Layout.rowSpan: rowspan
             Layout.preferredWidth: Math.floor(span * grid.unit + (span - 1) * grid.columnSpacing)
@@ -498,18 +826,92 @@ Panel {
         }
       }
 
-      // ---------------- arrange: add a control ----------------
+      // ---------------- page: layout ----------------
+      Item {
+        width: parent.width
+        height: Style.space(24)
+        visible: !root.pageOpen && root.view === "catalog"
+
+        Rectangle {
+          id: catalogBack
+          width: Style.space(24)
+          height: Style.space(24)
+          radius: Style.cornerRadius
+          color: catalogBackMouse.containsMouse
+            ? Util.alpha(Color.foreground, Style.hoverFillAlpha) : "transparent"
+          border.width: 1
+          border.color: Util.alpha(Color.foreground, Style.normalBorderAlpha)
+
+          Text {
+            anchors.centerIn: parent
+            text: "←"
+            color: Color.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+          }
+
+          MouseArea {
+            id: catalogBackMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              root.view = "grid"
+              root.chooserId = ""
+            }
+          }
+        }
+
+        Text {
+          anchors.left: catalogBack.right
+          anchors.leftMargin: Style.space(8)
+          anchors.verticalCenter: parent.verticalCenter
+          text: "Layout"
+          color: Color.foreground
+          font.family: Style.font.family
+          font.pixelSize: Style.font.title
+          font.bold: true
+        }
+
+        Rectangle {
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          width: doneText.implicitWidth + Style.space(16)
+          height: Style.space(20)
+          radius: Style.cornerRadius
+          color: doneMouse.containsMouse
+            ? Util.alpha(Color.accent, Style.hoverFillAlpha) : "transparent"
+          border.width: 1
+          border.color: Util.alpha(Color.accent, 0.45)
+
+          Text {
+            id: doneText
+            anchors.centerIn: parent
+            text: "Done"
+            color: Color.accent
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          MouseArea {
+            id: doneMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.view = "grid"
+          }
+        }
+      }
+
       Item {
         width: parent.width
         height: Style.space(18)
-        visible: !root.pageOpen && root.editing
+        visible: !root.pageOpen && root.view === "catalog"
 
         Text {
           width: parent.width
           anchors.verticalCenter: parent.verticalCenter
-          text: root.hiddenSections.length > 0
-            ? "Tap a size to resize, × to remove. Add a control below."
-            : "Tap a size to resize, × to remove."
+          text: "Pick a control, then a size. Choosing a size puts it on the deck."
           color: Util.alpha(Color.foreground, 0.45)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -518,10 +920,10 @@ Panel {
       }
 
       Column {
-        id: addList
+        id: onGridList
         width: parent.width
         spacing: Style.space(2)
-        visible: !root.pageOpen && root.editing
+        visible: !root.pageOpen && root.view === "catalog"
 
         Item {
           width: parent.width
@@ -530,7 +932,7 @@ Panel {
           Text {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            text: "ADD A CONTROL"
+            text: "ON THE GRID"
             color: Util.alpha(Color.foreground, 0.45)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -540,7 +942,7 @@ Panel {
           Text {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            text: String(root.hiddenSections.length)
+            text: String(root.onGridEntries.length)
             color: Util.alpha(Color.foreground, 0.45)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -548,62 +950,69 @@ Panel {
         }
 
         Repeater {
-          model: root.hiddenSections
+          model: root.onGridEntries
 
-          delegate: Item {
+          delegate: CatalogRow {
             required property var modelData
-            width: addList.width
-            height: Style.space(30)
-
-            Text {
-              anchors.left: parent.left
-              anchors.leftMargin: Style.space(8)
-              anchors.right: addChip.left
-              anchors.rightMargin: Style.space(8)
-              anchors.verticalCenter: parent.verticalCenter
-              text: modelData.title
-              color: Color.foreground
-              font.family: Style.font.family
-              font.pixelSize: Style.font.body
-              elide: Text.ElideRight
+            entry: modelData
+            onGrid: true
+            onSizeRequested: {
+              root.chooserId = String(modelData.id)
+              root.view = "size"
             }
+            onRemoveRequested: root.setShown(modelData.id, false)
+          }
+        }
+      }
 
-            Rectangle {
-              id: addChip
-              anchors.right: parent.right
-              anchors.rightMargin: Style.space(8)
-              anchors.verticalCenter: parent.verticalCenter
-              width: addText.implicitWidth + Style.space(16)
-              height: Style.space(20)
-              radius: Style.cornerRadius
-              color: addMouse.containsMouse
-                ? Util.alpha(Color.accent, Style.hoverFillAlpha)
-                : "transparent"
-              border.width: 1
-              border.color: Util.alpha(Color.foreground, 0.3)
+      Column {
+        id: availableList
+        width: parent.width
+        spacing: Style.space(2)
+        visible: !root.pageOpen && root.view === "catalog"
 
-              Text {
-                id: addText
-                anchors.centerIn: parent
-                text: "＋ Add"
-                color: Color.foreground
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-              }
+        Item {
+          width: parent.width
+          height: Style.space(22)
 
-              MouseArea {
-                id: addMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.setShown(modelData.id, true)
-              }
+          Text {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: "AVAILABLE"
+            color: Util.alpha(Color.foreground, 0.45)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.letterSpacing: 1.5
+          }
+
+          Text {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            text: String(root.availableEntries.length)
+            color: Util.alpha(Color.foreground, 0.45)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+        }
+
+        Repeater {
+          model: root.availableEntries
+
+          delegate: CatalogRow {
+            required property var modelData
+            entry: modelData
+            onGrid: false
+            onSizeRequested: {
+              root.chooserId = String(modelData.id)
+              root.view = "size"
             }
+            onInstallRequested: root.installSection(modelData.repo, modelData.pluginId,
+              modelData.id, modelData.title)
           }
         }
 
         Text {
-          visible: root.hiddenSections.length === 0
+          visible: root.availableEntries.length === 0
           width: parent.width
           height: Style.space(22)
           verticalAlignment: Text.AlignVCenter
@@ -615,11 +1024,279 @@ Panel {
         }
       }
 
+      // ---------------- arrange: add from GitHub ----------------
+      Column {
+        id: githubAdd
+        width: parent.width
+        spacing: Style.space(4)
+        visible: !root.pageOpen && root.view === "catalog"
+
+        Item {
+          width: parent.width
+          height: Style.space(22)
+
+          Text {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: "ADD FROM GITHUB"
+            color: Util.alpha(Color.foreground, 0.45)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.letterSpacing: 1.5
+          }
+        }
+
+        TextField {
+          id: repoField
+          width: parent.width
+          height: Style.space(28)
+          placeholderText: "https://github.com/user/omarchy-plugin"
+          placeholderTextColor: Util.alpha(Color.foreground, 0.35)
+          color: Color.foreground
+          font.family: Style.font.family
+          font.pixelSize: Style.font.body
+          selectByMouse: true
+          background: Rectangle {
+            color: Util.alpha(Color.foreground, 0.05)
+            border.width: 1
+            border.color: Util.alpha(Color.foreground, 0.22)
+            radius: Style.cornerRadius
+          }
+          onAccepted: root.installSection(text, "", "", "")
+        }
+
+        Item {
+          width: parent.width
+          height: Style.space(24)
+
+          Rectangle {
+            id: installChip
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: installText.implicitWidth + Style.space(16)
+            height: Style.space(20)
+            radius: Style.cornerRadius
+            color: installMouse.containsMouse && installMouse.enabled
+              ? Util.alpha(Color.accent, Style.hoverFillAlpha)
+              : "transparent"
+            border.width: 1
+            border.color: Util.alpha(Color.foreground, 0.3)
+            opacity: installMouse.enabled ? 1.0 : 0.45
+
+            Text {
+              id: installText
+              anchors.centerIn: parent
+              text: root.installing ? "Installing…" : "Install"
+              color: Color.foreground
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+
+            MouseArea {
+              id: installMouse
+              anchors.fill: parent
+              enabled: !root.installing && repoField.text.trim() !== ""
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.installSection(repoField.text, "", "", "")
+            }
+          }
+
+          Text {
+            anchors.left: installChip.right
+            anchors.leftMargin: Style.space(8)
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.installError !== ""
+              ? root.installError
+              : (root.installing ? "Installing…" : root.installStatus)
+            color: root.installError !== "" ? Color.urgent
+              : Util.alpha(Color.foreground, 0.55)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            elide: Text.ElideRight
+          }
+        }
+
+        Text {
+          width: parent.width
+          wrapMode: Text.Wrap
+          text: "Only GitHub repositories. A plugin runs with your shell's permissions."
+          color: Util.alpha(Color.foreground, 0.35)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+        }
+      }
+
+      // ---------------- page: size ----------------
+      //
+      // Full previews, one per size, rendered with the real Tile and the
+      // live section. The unit is the deck's own unit, so a 4x1 preview is
+      // exactly what the 4x1 tile will look like, not an outline.
+      Column {
+        id: sizeView
+        width: parent.width
+        spacing: Style.space(8)
+        visible: !root.pageOpen && root.view === "size"
+
+        readonly property var entry: root.catalogEntryById(root.chooserId)
+
+        Item {
+          width: parent.width
+          height: Style.space(24)
+
+          Rectangle {
+            id: sizeBack
+            width: Style.space(24)
+            height: Style.space(24)
+            radius: Style.cornerRadius
+            color: sizeBackMouse.containsMouse
+              ? Util.alpha(Color.foreground, Style.hoverFillAlpha) : "transparent"
+            border.width: 1
+            border.color: Util.alpha(Color.foreground, Style.normalBorderAlpha)
+
+            Text {
+              anchors.centerIn: parent
+              text: "←"
+              color: Color.foreground
+              font.family: Style.font.family
+              font.pixelSize: Style.font.body
+            }
+
+            MouseArea {
+              id: sizeBackMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.view = "catalog"
+            }
+          }
+
+          Text {
+            anchors.left: sizeBack.right
+            anchors.leftMargin: Style.space(8)
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            text: sizeView.entry ? sizeView.entry.title : "Size"
+            color: Color.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.title
+            font.bold: true
+            elide: Text.ElideRight
+          }
+        }
+
+        Repeater {
+          model: root.sizeChoicesFor(sizeView.entry)
+
+          delegate: Column {
+            id: sizeOption
+            required property var modelData
+
+            readonly property var entry: sizeView.entry
+            readonly property var sectionItem: entry ? root.sectionMap[String(entry.id)] : null
+            readonly property real gap: Style.space(6)
+            readonly property real unit: Math.max(Style.space(30),
+              Math.floor((sizeView.width - 3 * gap - Style.space(16)) / 4))
+            readonly property real tileW: modelData.rows === 2
+              ? 2 * unit + gap
+              : modelData.span * unit + (modelData.span - 1) * gap
+            readonly property real tileH: modelData.rows === 2 ? 2 * unit + gap : unit
+            readonly property bool current: !!entry
+              && entry.span === modelData.span && entry.rows === modelData.rows
+
+            width: sizeView.width
+            spacing: Style.space(3)
+
+            Text {
+              width: parent.width
+              text: modelData.sub + "  ·  " + modelData.label
+                + (sizeOption.current ? "  ·  current" : "")
+              color: sizeOption.current ? Color.accent
+                : Util.alpha(Color.foreground, 0.6)
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              font.bold: sizeOption.current
+            }
+
+            Rectangle {
+              width: sizeOption.tileW + Style.space(4)
+              height: sizeOption.tileH + Style.space(4)
+              color: sizeOption.current
+                ? Util.alpha(Color.accent, 0.06) : "transparent"
+              border.width: sizeOption.current ? 2 : 1
+              border.color: sizeOption.current
+                ? Util.alpha(Color.accent, 0.85)
+                : Util.alpha(Color.foreground, 0.12)
+              radius: Style.cornerRadius
+              clip: true
+
+              Tile {
+                anchors.fill: parent
+                anchors.margins: 2
+                section: sizeOption.sectionItem
+                compact: sizeOption.modelData.span === 1 && sizeOption.modelData.rows === 1
+              }
+
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  if (!sizeOption.entry) return
+                  root.applySize(sizeOption.entry.id, sizeOption.modelData.span,
+                    sizeOption.modelData.rows)
+                  root.view = "grid"
+                  root.chooserId = ""
+                }
+              }
+            }
+          }
+        }
+
+        Item {
+          width: parent.width
+          height: Style.space(24)
+
+          Rectangle {
+            visible: !!sizeView.entry
+            anchors.left: parent.left
+            width: sizeRemoveText.implicitWidth + Style.space(16)
+            height: Style.space(20)
+            radius: Style.cornerRadius
+            color: sizeRemoveMouse.containsMouse
+              ? Util.alpha(Color.urgent, 0.12) : "transparent"
+            border.width: 1
+            border.color: Util.alpha(Color.foreground, 0.3)
+
+            Text {
+              id: sizeRemoveText
+              anchors.centerIn: parent
+              text: "Remove from the deck"
+              color: Color.foreground
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+
+            MouseArea {
+              id: sizeRemoveMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: {
+                if (sizeView.entry) root.setShown(sizeView.entry.id, false)
+                root.view = "catalog"
+                root.chooserId = ""
+              }
+            }
+          }
+        }
+      }
+
       // ---------------- notice strip ----------------
       Item {
         width: parent.width
         height: Style.space(38)
-        visible: !root.pageOpen && root.notice !== null
+        visible: !root.pageOpen && root.view === "grid" && root.notice !== null
 
         readonly property bool urgent: !!root.notice && root.notice.severity === "urgent"
 
@@ -769,7 +1446,12 @@ Panel {
     }
   }
 
-  onOpenedChanged: if (!opened) editing = false
+  onOpenedChanged: {
+    if (!opened) {
+      view = "grid"
+      chooserId = ""
+    }
+  }
 
   // ---- optional: open a section's stock Omarchy panel ---------------------
   //

@@ -43,11 +43,10 @@ command -v omarchy >/dev/null || die "this is not an Omarchy machine"
 
 # id | repo | title | span | rows | hidden
 #
-# "hidden" sections are installed and registered but not drawn as tiles: the
-# connectivity cluster's hold opens their pages, so a duplicate Wi-Fi or
-# Bluetooth tile would be two controls for one radio.
+# "hidden" sections are installed and registered but not drawn as tiles. They
+# are still instantiated, so their pages are reachable through openSection;
+# the Layout page lists them so a user can place them when wanted.
 SECTIONS=(
-  "mutex-solutions.connectivity|https://github.com/mutex-solutions/omarchy-connectivity.git|Connectivity|2|2"
   "mutex-solutions.audio|https://github.com/mutex-solutions/omarchy-audio.git|Audio|2|1"
   "mutex-solutions.display|https://github.com/mutex-solutions/omarchy-display.git|Display|2"
   "mutex-solutions.sessions|https://github.com/mutex-solutions/omarchy-sessions.git|Sessions|2|1"

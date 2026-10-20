@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.0
+
+- **Arranging is a page, not a mode on the grid.** Edit opens the Layout page:
+  every placed section with a size door and a remove, every available section,
+  and the first-party catalogue. The home grid keeps its controls.
+- **Full size previews.** The size page renders the real tile at `1×1`, `2×1`,
+  `4×1` and `2×2` (custom tiles only) with the live section inside, rather
+  than an abstract outline. Choosing a size places the section and returns to
+  the deck.
+- **`catalog.json`.** The nine first-party sections are preloaded with their
+  repository URLs, titles, glyphs and descriptions.
+- **Install from GitHub.** Paste a repository URL; `scripts/deck-add-section`
+  clones it with `omarchy plugin add`, reads the manifest, requires
+  `deck/Section.qml`, and merges one entry into the registry with an atomic
+  rename. Already-installed plugins are registered by their git origin instead
+  of failing. The registry keeps its order and its span/rows on re-add.
+- IPC: `edit`, `choose`, `install`, `status`, `setSize`, `setShown`.
+- The grid's content scrolls; the tile overlay and the old size cycle are
+  gone.
+- **Connectivity is no longer a section.** It was a composite of four radios;
+  the catalogue carries Wi-Fi, Bluetooth and Tailscale as individual sections,
+  and a user places them in whatever arrangement they want. The connectivity
+  plugin still works standalone but is not registered with Deck.
+
 ## 0.2.0
 
 - **Arrange mode.** An Edit button in the panel header turns the grid into a
