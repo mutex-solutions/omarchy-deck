@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "mutex-solutions.deck",
   "name": "Deck",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "author": "mutex-solutions",
   "license": "MIT",
   "description": "A pluggable control surface for the Omarchy bar. Tiles toggle on click; hold opens their page.",

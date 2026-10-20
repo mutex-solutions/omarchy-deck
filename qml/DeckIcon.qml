@@ -11,7 +11,12 @@ Item {
   implicitWidth: Style.bar.iconCanvas
   implicitHeight: width
 
-  readonly property real size: Math.min(width, height)
+  // The bar's icon canvas is larger than a glyph's painted box. Fill it and
+  // the mark looks oversized next to the text glyphs; draw at their optical
+  // size instead.
+  readonly property real canvas: Math.min(width, height)
+  readonly property real size: canvas * 0.66
+  readonly property real origin: (canvas - size) / 2
   readonly property real gap: Math.max(1, size * 0.15)
   readonly property real cell: Math.max(1, (size - gap) / 2)
   readonly property real radius: Math.max(1, cell * 0.22)
@@ -25,32 +30,32 @@ Item {
   }
 
   Cell {
-    x: 0
-    y: 0
+    x: root.origin
+    y: root.origin
     color: "transparent"
     border.width: root.edge
     border.color: root.color
   }
 
   Cell {
-    x: root.cell + root.gap
-    y: 0
+    x: root.origin + root.cell + root.gap
+    y: root.origin
     color: "transparent"
     border.width: root.edge
     border.color: root.color
   }
 
   Cell {
-    x: 0
-    y: root.cell + root.gap
+    x: root.origin
+    y: root.origin + root.cell + root.gap
     color: "transparent"
     border.width: root.edge
     border.color: root.color
   }
 
   Cell {
-    x: root.cell + root.gap
-    y: root.cell + root.gap
+    x: root.origin + root.cell + root.gap
+    y: root.origin + root.cell + root.gap
     color: root.color
   }
 }

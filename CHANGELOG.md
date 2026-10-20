@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2
+
+- The Deck mark draws at the optical size of a bar glyph instead of filling
+  the whole icon canvas, so it no longer looks larger than its neighbours.
+
 ## 0.6.1
 
 - **Every tile keeps the standard surface and border.** A custom body used to
