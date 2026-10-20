@@ -41,13 +41,19 @@ die() { printf 'install-bundle: %s\n' "$*" >&2; exit 1; }
 
 command -v omarchy >/dev/null || die "this is not an Omarchy machine"
 
-# id | repo | title | span | rows
+# id | repo | title | span | rows | hidden
+#
+# "hidden" sections are installed and registered but not drawn as tiles: the
+# connectivity cluster's hold opens their pages, so a duplicate Wi-Fi or
+# Bluetooth tile would be two controls for one radio.
 SECTIONS=(
   "mutex-solutions.connectivity|https://github.com/mutex-solutions/omarchy-connectivity.git|Connectivity|2|2"
   "mutex-solutions.audio|https://github.com/mutex-solutions/omarchy-audio.git|Audio|2|1"
   "mutex-solutions.display|https://github.com/mutex-solutions/omarchy-display.git|Display|2"
   "mutex-solutions.nightlight|https://github.com/mutex-solutions/omarchy-nightlight.git|Night light|2"
   "mutex-solutions.lid-awake|https://github.com/mutex-solutions/omarchy-lid-awake.git|Lid Awake|2"
+  "mutex-solutions.wifi|https://github.com/mutex-solutions/omarchy-wifi.git|Wi-Fi|2|1|hidden"
+  "mutex-solutions.bluetooth|https://github.com/mutex-solutions/omarchy-bluetooth.git|Bluetooth|2|1|hidden"
 )
 
 installed() { [ -f "$PLUGINS/$1/manifest.json" ]; }
@@ -73,7 +79,7 @@ fi
 mkdir -p "$(dirname "$USER_REGISTRY")"
 entries=""
 for row in "${SECTIONS[@]}"; do
-  IFS='|' read -r id url title span rows <<< "$row"
+  IFS='|' read -r id url title span rows hidden <<< "$row"
 
   if installed "$id"; then
     say "$id -> already installed"
@@ -91,9 +97,12 @@ for row in "${SECTIONS[@]}"; do
   page_file="$PLUGINS/$id/deck/Page.qml"
   [ -f "$section_file" ] || die "$id has no deck/Section.qml"
 
+  extra=""
+  [ "$hidden" = "hidden" ] && extra=', "hidden": true'
+
   [ -n "$entries" ] && entries="$entries,"
   entries="$entries
-    { \"id\": \"$(basename "$id" | cut -d. -f2)\", \"title\": \"$title\", \"file\": \"$section_file\", \"page\": \"$page_file\", \"span\": $span, \"rows\": ${rows:-1} }"
+    { \"id\": \"$(basename "$id" | cut -d. -f2)\", \"title\": \"$title\", \"file\": \"$section_file\", \"page\": \"$page_file\", \"span\": $span, \"rows\": ${rows:-1}$extra }"
 done
 
 cat > "$USER_REGISTRY" <<EOF

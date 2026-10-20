@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3
+
+- **Hidden sections.** A registry entry with `"hidden": true` is instantiated
+  and can be opened through `openSection`, but is not drawn as a tile. This is
+  what lets the connectivity cluster's hold open Wi-Fi and Bluetooth without
+  duplicating those controls in the grid.
+- The bundle wires `wifi` and `bluetooth` as hidden sections.
+
 ## 0.1.2
 
 - `docs/UPSTREAM.md`: the sync rule for section authors. Reference Omarchy at

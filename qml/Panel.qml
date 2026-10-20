@@ -32,6 +32,22 @@ Panel {
   readonly property string pluginDir: Quickshell.env("HOME") + "/.config/omarchy/plugins/mutex-solutions.deck"
 
   property var sections: []
+
+  // A section can live in the registry without owning a tile. That is how the
+  // connectivity cluster's hold opens Wi-Fi or Bluetooth: the section is
+  // instantiated so its state exists, but the grid does not draw a duplicate.
+  readonly property var gridSections: {
+    var out = []
+    for (var i = 0; i < sections.length; i++)
+      if (!sections[i].hidden) out.push(sections[i])
+    return out
+  }
+  readonly property var hiddenSections: {
+    var out = []
+    for (var i = 0; i < sections.length; i++)
+      if (sections[i].hidden) out.push(sections[i])
+    return out
+  }
   // id -> loaded section item, so an IPC call or keybind can drive a section
   // without the panel being open.
   property var sectionMap: ({})
@@ -196,6 +212,29 @@ Panel {
       onActivateRequested: root.close()
     }
 
+    // Hidden sections: instantiated so their `state` is registered and their
+    // page can be opened through openSection, but never drawn as a tile.
+    Item {
+      visible: false
+      width: 0
+      height: 0
+
+      Repeater {
+        model: root.hiddenSections
+
+        delegate: Loader {
+          id: hiddenLoader
+          required property var modelData
+          source: root.resolvePath(String(modelData.file))
+          onLoaded: root.registerSection(modelData.id, item)
+          onStatusChanged: {
+            if (status === Loader.Error)
+              console.warn("deck: failed to load section", modelData.id, hiddenLoader.errorString())
+          }
+        }
+      }
+    }
+
     Column {
       id: content
       anchors.top: parent.top
@@ -217,7 +256,7 @@ Panel {
         readonly property real unit: (width - 3 * columnSpacing) / 4
 
         Repeater {
-          model: root.sections
+          model: root.gridSections
 
           delegate: Tile {
             required property var modelData
