@@ -250,9 +250,14 @@ Panel {
 
             section: sectionLoader.item
 
+            // A section with no toggle() has nothing to switch, so the tap
+            // does what the hold would: it opens the page. Otherwise a tap on
+            // a read-only tile would be a dead press.
             onToggled: {
               if (sectionLoader.item && typeof sectionLoader.item.toggle === "function")
                 sectionLoader.item.toggle()
+              else
+                root.openPage(modelData)
             }
 
             onHeldLong: root.openPage(modelData)

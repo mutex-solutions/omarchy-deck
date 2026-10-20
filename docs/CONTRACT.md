@@ -42,7 +42,7 @@ Required:
 | `label` | string | tile title |
 | `detail` | string | tile second line |
 | `icon` | string | glyph |
-| `toggle()` | function | what a click does |
+| `toggle()` | function | optional: what a click does. **Omit it when the section has no single on/off** (Display arranges several monitors); Deck then treats a click as "open the page", so the gesture is never dead. |
 | `tileComponent` | `Component` | optional: replaces the default tile body (the connectivity cluster is four buttons) |
 | `notice` | object | optional: `{ severity: "info" \| "urgent", title, detail }`; Deck draws it in the shared strip |
 
@@ -64,7 +64,7 @@ closing the page belongs in the section.
 
 | click | hold |
 | --- | --- |
-| `toggle()` | opens the page, when the registry entry has one |
+| `toggle()`, or opens the page when the section has no toggle | opens the page, when the registry entry has one |
 
 A hold never toggles. A tap shows no hold indicator: the progress hairline is
 attached 180 ms after the press begins, so short presses show nothing at all.
