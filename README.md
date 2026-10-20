@@ -68,7 +68,7 @@ audio, Wi-Fi and Bluetooth sections without copying files into Deck.
 | Member | Type | Meaning |
 |---|---|---|
 | `section` | `var` | the live section instance; the page reads state from here |
-| `host` | `var` | `{ close(), notify(text) }` |
+| `host` | `var` | `{ open, close(), notify(text) }` |
 
 Deck draws the back button, the title and the frame. A page that draws its own
 back button is a contract violation.

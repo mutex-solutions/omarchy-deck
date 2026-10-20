@@ -71,6 +71,9 @@ Panel {
   // Handed to every page. close() is the only navigation a page may trigger;
   // notify() is a one-line message on the notice strip.
   readonly property QtObject host: QtObject {
+    // Whether the page is actually on screen. A page that runs a capture or a
+    // poll should bind to this rather than staying hot behind a closed panel.
+    readonly property bool open: root.opened && root.pageOpen
     function close() { root.closePage() }
     function notify(text) { console.log("deck:", String(text)) }
   }

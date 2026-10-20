@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.6
+
+- `host.open`: pages now know whether they are actually on screen. A page is
+  loaded once and survives the panel closing, so `Component.onCompleted` is the
+  wrong lifetime for anything with a running cost. The audio page's input meter
+  is the first caller: it is a real capture stream, and it now stops when the
+  panel closes instead of recording behind it.
+
 ## 0.1.5
 
 - `Loader.errorString` is a property, not a function. A section that failed to

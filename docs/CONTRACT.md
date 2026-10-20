@@ -51,10 +51,16 @@ Required:
 | Member | Type | Meaning |
 | --- | --- | --- |
 | `section` | var | injected: the live section instance |
-| `host` | var | injected: `{ close(), notify(text) }` |
+| `host` | var | injected: `{ open, close(), notify(text) }` |
 
 The page renders content only. The host draws the back button, the title, and
 the frame. A page that draws its own back button is a contract violation.
+
+`host.open` is whether the page is actually on screen: the panel is open and
+the page has not been closed. Anything with a running cost (a capture meter, a
+poll, a busy-loop animation) must bind to it rather than to its own existence.
+A page is loaded once and kept while the panel opens and closes, so
+`Component.onCompleted` alone is the wrong lifetime.
 
 **State lives in the section, never in the page.** The page is handed the same
 instance the tile reads, so the two cannot disagree. Anything that must survive
