@@ -31,22 +31,97 @@ Panel {
   // stable base, and a relative one resolves against the shell's cwd.
   readonly property string pluginDir: Quickshell.env("HOME") + "/.config/omarchy/plugins/mutex-solutions.deck"
 
-  property var sections: []
+  // What the registry shipped. `layout` is the user's override on top of it:
+  // which entries are on the grid, in what size. The registry stays a
+  // read-only catalogue owned by the plugin or the bundle.
+  property var registrySections: []
+  property var layout: ({})
 
-  // A section can live in the registry without owning a tile. That is how the
-  // connectivity cluster's hold opens Wi-Fi or Bluetooth: the section is
-  // instantiated so its state exists, but the grid does not draw a duplicate.
-  readonly property var gridSections: {
+  readonly property string layoutPath: Quickshell.env("HOME") + "/.config/deck/layout.json"
+
+  // every arrangement a tile may take, in the order the size chip cycles
+  readonly property var sizeChoices: [
+    { label: "1×1", span: 1, rows: 1 },
+    { label: "2×1", span: 2, rows: 1 },
+    { label: "4×1", span: 4, rows: 1 },
+    { label: "2×2", span: 2, rows: 2 }
+  ]
+
+  // Registry order, with the user's shown/span/rows applied. A registry entry
+  // marked hidden is only a default: it can be put on the grid from arrange
+  // mode, and a hidden entry is still instantiated so its page stays reachable.
+  readonly property var allSections: {
     var out = []
-    for (var i = 0; i < sections.length; i++)
-      if (!sections[i].hidden) out.push(sections[i])
+    for (var i = 0; i < registrySections.length; i++) {
+      var s = registrySections[i]
+      var id = String(s.id)
+      var o = layout[id] || ({})
+      var span = o.span !== undefined ? Number(o.span) : Number(s.span)
+      if (span !== 1 && span !== 2 && span !== 4) span = 2
+      var rows = o.rows !== undefined ? Number(o.rows) : Number(s.rows)
+      rows = rows === 2 ? 2 : 1
+      out.push({
+        id: id,
+        title: String(s.title || id),
+        file: s.file,
+        page: s.page,
+        defaultHidden: s.hidden === true,
+        shown: o.shown !== undefined ? (o.shown === true) : (s.hidden !== true),
+        span: span,
+        rows: rows
+      })
+    }
     return out
   }
-  readonly property var hiddenSections: {
-    var out = []
-    for (var i = 0; i < sections.length; i++)
-      if (sections[i].hidden) out.push(sections[i])
-    return out
+
+  readonly property var gridSections: allSections.filter(function(s) { return s.shown })
+  readonly property var hiddenSections: allSections.filter(function(s) { return !s.shown })
+
+  function sectionEntry(id) {
+    for (var i = 0; i < allSections.length; i++)
+      if (allSections[i].id === String(id)) return allSections[i]
+    return null
+  }
+
+  function sizeLabelFor(entry) {
+    if (!entry) return ""
+    for (var i = 0; i < sizeChoices.length; i++)
+      if (sizeChoices[i].span === entry.span && sizeChoices[i].rows === entry.rows)
+        return sizeChoices[i].label
+    return entry.span + "×" + entry.rows
+  }
+
+  function saveLayout() {
+    var payload = JSON.stringify({ version: 1, entries: layout })
+    Quickshell.execDetached(["bash", "-c",
+      "printf '%s' " + Util.shellQuote(payload) + " > " + Util.shellQuote(root.layoutPath)])
+  }
+
+  function updateLayout(id, patch) {
+    var next = ({})
+    for (var k in layout) next[k] = layout[k]
+    var cur = ({})
+    var existing = layout[String(id)]
+    if (existing) for (var p in existing) cur[p] = existing[p]
+    for (var q in patch) cur[q] = patch[q]
+    next[String(id)] = cur
+    layout = next
+    saveLayout()
+  }
+
+  function setShown(id, shown) {
+    updateLayout(id, { shown: shown === true })
+  }
+
+  function cycleSize(id) {
+    var entry = sectionEntry(id)
+    if (!entry) return
+    var index = -1
+    for (var i = 0; i < sizeChoices.length; i++)
+      if (sizeChoices[i].span === entry.span && sizeChoices[i].rows === entry.rows)
+        index = i
+    var next = sizeChoices[(index + 1) % sizeChoices.length]
+    updateLayout(id, { span: next.span, rows: next.rows })
   }
   // id -> loaded section item, so an IPC call or keybind can drive a section
   // without the panel being open.
@@ -67,6 +142,7 @@ Panel {
   property string pageTitle: ""
   property string pageSectionId: ""
   readonly property bool pageOpen: pageSource !== ""
+  property bool editing: false
 
   // Handed to every page. close() is the only navigation a page may trigger;
   // notify() is a one-line message on the notice strip.
@@ -135,13 +211,25 @@ Panel {
     function toggleSection(id: string) { root.toggleSection(id) }
     function openSection(id: string) {
       var entry = null
-      for (var i = 0; i < root.sections.length; i++)
-        if (String(root.sections[i].id) === String(id)) entry = root.sections[i]
+      for (var i = 0; i < root.allSections.length; i++)
+        if (root.allSections[i].id === String(id)) entry = root.allSections[i]
       if (!entry) { console.warn("deck: no section", id); return }
       root.openPage(entry)
       root.open()
     }
     function back() { root.closePage() }
+    function edit() {
+      root.editing = true
+      root.closePage()
+      root.open()
+    }
+    // Scriptable arrange actions, for a keybind or a reproducible setup.
+    function setSize(id: string, span: int, rows: int) {
+      root.updateLayout(id, { span: span, rows: rows })
+    }
+    function setShown(id: string, shown: bool) {
+      root.setShown(id, shown)
+    }
   }
 
   // ---- section registry -------------------------------------------------
@@ -154,7 +242,7 @@ Panel {
   function loadSections(raw, source) {
     try {
       var parsed = JSON.parse(raw || "{}")
-      root.sections = parsed.sections || []
+      root.registrySections = parsed.sections || []
     } catch (e) {
       // A malformed registry must not take the bar down. Keep what was
       // loaded before and say so where a developer will see it.
@@ -183,6 +271,24 @@ Panel {
     onLoaded: if (!root.userRegistryPresent) root.loadSections(text(), "bundled sections.json")
   }
 
+  // The user's arrangement. Absent means "the registry defaults", which is a
+  // valid state and the one a fresh install is in.
+  FileView {
+    id: layoutFile
+    path: root.layoutPath
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      try {
+        var parsed = JSON.parse(text() || "{}")
+        root.layout = parsed.entries || ({})
+      } catch (e) {
+        console.warn("deck: ~/.config/deck/layout.json is not valid JSON:", e)
+      }
+    }
+  }
+
   // ---- bar button -------------------------------------------------------
   BarIconButton {
     id: button
@@ -203,7 +309,10 @@ Panel {
     contentWidth: panel.fittedContentWidth(Style.space(380))
     // fittedContentHeight already adds verticalContentInset (padding * 2), so
     // adding padding here as well leaves a dead band under the content.
-    contentHeight: panel.fittedContentHeight(content.implicitHeight, Style.space(560))
+    // Arrange mode shows the size controls and the add list under the grid;
+    // give it the extra room rather than clipping the last control.
+    contentHeight: panel.fittedContentHeight(content.implicitHeight,
+      root.editing ? Style.space(660) : Style.space(560))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -238,12 +347,90 @@ Panel {
       }
     }
 
+    // The grid fits without scrolling, but arrange mode adds the size
+    // controls and the full list of sections that are not on the grid. Cap the
+    // popup and scroll rather than clipping the last control off the screen.
+    ScrollView {
+      id: contentScroll
+      anchors.fill: parent
+      clip: true
+      ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+      // Hidden, like every other Deck page: a bar overlays content here.
+      ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+
     Column {
       id: content
-      anchors.top: parent.top
-      anchors.left: parent.left
-      anchors.right: parent.right
+      width: contentScroll.availableWidth
       spacing: Style.space(10)
+
+      // ---------------- header ----------------
+      Item {
+        width: parent.width
+        height: Style.space(22)
+        visible: !root.pageOpen
+
+        Text {
+          id: deckTitle
+          anchors.left: parent.left
+          anchors.verticalCenter: parent.verticalCenter
+          text: "DECK"
+          color: Util.alpha(Color.foreground, 0.45)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          font.letterSpacing: 1.5
+        }
+
+        Text {
+          anchors.left: deckTitle.right
+          anchors.leftMargin: Style.space(8)
+          anchors.verticalCenter: parent.verticalCenter
+          text: root.editing ? "arrange" : ""
+          color: Util.alpha(Color.accent, 0.8)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+        }
+
+        Rectangle {
+          id: editChip
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          width: editText.implicitWidth + Style.space(16)
+          height: Style.space(20)
+          radius: Style.cornerRadius
+          color: editMouse.containsMouse
+            ? Util.alpha(Color.accent, Style.hoverFillAlpha)
+            : "transparent"
+          border.width: 1
+          border.color: Util.alpha(root.editing ? Color.accent : Color.foreground, 0.32)
+
+          Text {
+            id: editText
+            anchors.centerIn: parent
+            text: root.editing ? "Done" : "Edit"
+            color: root.editing ? Color.accent : Color.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          MouseArea {
+            id: editMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              root.editing = !root.editing
+              if (root.editing) root.closePage()
+            }
+          }
+        }
+      }
+
+      Rectangle {
+        width: parent.width
+        height: 1
+        visible: !root.pageOpen
+        color: Util.alpha(Color.foreground, 0.1)
+      }
 
       // ---------------- grid ----------------
       // GridLayout, not Flow: a section may span rows as well as columns (the
@@ -273,6 +460,10 @@ Panel {
             readonly property int rowspan: Number(modelData.rows) === 2 ? 2 : 1
 
             compact: span === 1 && rowspan === 1
+            editing: root.editing
+            sizeLabel: root.sizeLabelFor(modelData)
+            onRemoveRequested: root.setShown(modelData.id, false)
+            onSizeRequested: root.cycleSize(modelData.id)
             Layout.columnSpan: span
             Layout.rowSpan: rowspan
             Layout.preferredWidth: Math.floor(span * grid.unit + (span - 1) * grid.columnSpacing)
@@ -304,6 +495,123 @@ Panel {
 
             onHeldLong: root.openPage(modelData)
           }
+        }
+      }
+
+      // ---------------- arrange: add a control ----------------
+      Item {
+        width: parent.width
+        height: Style.space(18)
+        visible: !root.pageOpen && root.editing
+
+        Text {
+          width: parent.width
+          anchors.verticalCenter: parent.verticalCenter
+          text: root.hiddenSections.length > 0
+            ? "Tap a size to resize, × to remove. Add a control below."
+            : "Tap a size to resize, × to remove."
+          color: Util.alpha(Color.foreground, 0.45)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          elide: Text.ElideRight
+        }
+      }
+
+      Column {
+        id: addList
+        width: parent.width
+        spacing: Style.space(2)
+        visible: !root.pageOpen && root.editing
+
+        Item {
+          width: parent.width
+          height: Style.space(22)
+
+          Text {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: "ADD A CONTROL"
+            color: Util.alpha(Color.foreground, 0.45)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.letterSpacing: 1.5
+          }
+
+          Text {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            text: String(root.hiddenSections.length)
+            color: Util.alpha(Color.foreground, 0.45)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+        }
+
+        Repeater {
+          model: root.hiddenSections
+
+          delegate: Item {
+            required property var modelData
+            width: addList.width
+            height: Style.space(30)
+
+            Text {
+              anchors.left: parent.left
+              anchors.leftMargin: Style.space(8)
+              anchors.right: addChip.left
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              text: modelData.title
+              color: Color.foreground
+              font.family: Style.font.family
+              font.pixelSize: Style.font.body
+              elide: Text.ElideRight
+            }
+
+            Rectangle {
+              id: addChip
+              anchors.right: parent.right
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              width: addText.implicitWidth + Style.space(16)
+              height: Style.space(20)
+              radius: Style.cornerRadius
+              color: addMouse.containsMouse
+                ? Util.alpha(Color.accent, Style.hoverFillAlpha)
+                : "transparent"
+              border.width: 1
+              border.color: Util.alpha(Color.foreground, 0.3)
+
+              Text {
+                id: addText
+                anchors.centerIn: parent
+                text: "＋ Add"
+                color: Color.foreground
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+              }
+
+              MouseArea {
+                id: addMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.setShown(modelData.id, true)
+              }
+            }
+          }
+        }
+
+        Text {
+          visible: root.hiddenSections.length === 0
+          width: parent.width
+          height: Style.space(22)
+          verticalAlignment: Text.AlignVCenter
+          leftPadding: Style.space(8)
+          text: "Everything is on the grid"
+          color: Util.alpha(Color.foreground, 0.4)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
         }
       }
 
@@ -458,7 +766,10 @@ Panel {
         }
       }
     }
+    }
   }
+
+  onOpenedChanged: if (!opened) editing = false
 
   // ---- optional: open a section's stock Omarchy panel ---------------------
   //

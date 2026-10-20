@@ -25,6 +25,13 @@ Item {
   // once, so it renders icon-only and keeps the name in the tooltip.
   property bool compact: false
 
+  // Arrange mode. The host draws these two controls over the tile and owns
+  // what they do; the tile only reports the press.
+  property bool editing: false
+  property string sizeLabel: ""
+  signal removeRequested()
+  signal sizeRequested()
+
   // A section may supply its own tile body (the connectivity cluster is four
   // buttons, not one glyph). When it does, the host's default body and its
   // gesture are disabled so the custom controls receive the clicks.
@@ -36,7 +43,7 @@ Item {
   // A custom tile draws its own body (the connectivity cluster is four
   // buttons), so the host's surface and border would just be a box around them.
   Rectangle {
-    visible: !tile.custom
+    visible: !tile.custom || tile.compact
     anchors.fill: parent
     radius: Style.cornerRadius
     color: tile.active
@@ -57,29 +64,28 @@ Item {
   // hit area subtly wrong.
   Loader {
     anchors.fill: parent
-    anchors.margins: Style.space(8)
-    visible: tile.custom
+    visible: tile.custom && !tile.compact
     sourceComponent: tile.custom && tile.section ? tile.section.tileComponent : null
   }
 
+  // Compact size. This is what makes "small icon" offerable for every section,
+  // including one whose normal body is a custom component.
+  Text {
+    visible: tile.compact
+    anchors.centerIn: parent
+    text: tile.icon
+    color: tile.active ? Color.accent : Color.foreground
+    font.family: Style.font.family
+    font.pixelSize: Style.font.display
+  }
+
   Item {
-    visible: !tile.custom
+    visible: !tile.custom && !tile.compact
     anchors.fill: parent
     anchors.margins: Style.space(12)
 
-    // compact square: glyph only, centred
-    Text {
-      visible: tile.compact
-      anchors.centerIn: parent
-      text: tile.icon
-      color: tile.active ? Color.accent : Color.foreground
-      font.family: Style.font.family
-      font.pixelSize: Style.font.display
-    }
-
     Text {
       id: iconText
-      visible: !tile.compact
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
       text: tile.icon
@@ -91,7 +97,6 @@ Item {
     }
 
     Column {
-      visible: !tile.compact
       anchors.left: iconText.right
       anchors.leftMargin: Style.space(11)
       anchors.right: parent.right
@@ -115,6 +120,82 @@ Item {
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
         elide: Text.ElideRight
+      }
+    }
+  }
+
+
+  // ---- arrange mode ----
+  //
+  // A scrim, not a second tile: the section's own controls stay visible so the
+  // user knows what they are resizing or removing, but every press lands here
+  // instead of toggling a radio while they arrange the grid.
+  Rectangle {
+    visible: tile.editing
+    anchors.fill: parent
+    z: 20
+    radius: Style.cornerRadius
+    color: Util.alpha(Color.background, 0.45)
+    border.width: 1
+    border.color: Util.alpha(Color.accent, 0.65)
+
+    MouseArea {
+      anchors.fill: parent
+      cursorShape: Qt.ArrowCursor
+      onClicked: {}
+    }
+
+    Rectangle {
+      width: Style.space(20)
+      height: width
+      radius: width / 2
+      anchors.top: parent.top
+      anchors.right: parent.right
+      anchors.margins: Style.space(4)
+      color: Util.alpha(Color.background, 0.92)
+      border.width: 1
+      border.color: Util.alpha(Color.foreground, 0.3)
+
+      Text {
+        anchors.centerIn: parent
+        text: "×"
+        color: Color.foreground
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+      }
+
+      MouseArea {
+        anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
+        onClicked: tile.removeRequested()
+      }
+    }
+
+    Rectangle {
+      id: sizeChip
+      anchors.left: parent.left
+      anchors.bottom: parent.bottom
+      anchors.margins: Style.space(4)
+      width: sizeText.implicitWidth + Style.space(12)
+      height: Style.space(18)
+      radius: Style.cornerRadius
+      color: Util.alpha(Color.background, 0.92)
+      border.width: 1
+      border.color: Util.alpha(Color.accent, 0.55)
+
+      Text {
+        id: sizeText
+        anchors.centerIn: parent
+        text: tile.sizeLabel
+        color: Color.accent
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+      }
+
+      MouseArea {
+        anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
+        onClicked: tile.sizeRequested()
       }
     }
   }
@@ -168,7 +249,8 @@ Item {
 
   MouseArea {
     anchors.fill: parent
-    enabled: !tile.custom
+    enabled: !tile.custom && !tile.editing
+    preventStealing: true
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton
     cursorShape: Qt.PointingHandCursor

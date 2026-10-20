@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.0
+
+- **Arrange mode.** An Edit button in the panel header turns the grid into a
+  layout editor: every tile gets a remove `×` and a size chip, and a list under
+  the grid offers every section that is not currently shown. Done leaves the
+  editor. The panel leaves arrange mode when it closes.
+- **Tile sizes.** `1×1` (icon only), `2×1` (half), `4×1` (full) and `2×2`
+  (square). A custom tile, such as the connectivity cluster, becomes its icon
+  at `1×1`, so the small size means the same thing for every section.
+- **`~/.config/deck/layout.json`.** The user's shown/size overrides, kept
+  separate from the registry so the bundle and `omarchy plugin update` stay
+  clean. The registry's `hidden` flag is now only a default: any registry
+  entry can be added from arrange mode.
+- **Custom tiles fill their cells.** A 2x2 custom tile is inset by zero and its
+  children use the grid's own gap, so the connectivity cluster's four radios
+  are the big square rather than four small squares inside one.
+- The grid's content scrolls when the editor needs more height.
+- IPC: `edit`, `setSize(id, span, rows)` and `setShown(id, shown)`, for a
+  keybind or a scripted setup.
+
 ## 0.1.7
 
 - The bundle installs and registers **Tailscale** as a hidden section, so the

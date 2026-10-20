@@ -39,6 +39,28 @@ one as a standalone bar widget.
 The bundle writes `~/.config/deck/sections.json`, which Deck prefers over the
 registry in its own checkout, so `omarchy plugin update` stays clean.
 
+## Arranging the grid
+
+The panel header has an **Edit** button. In arrange mode:
+
+- every tile gets `×` (remove) and a size chip;
+- the chip cycles `1×1` (icon only), `2×1` (half), `4×1` (full), `2×2`;
+- **Add a control** lists every registered section that is not on the grid.
+
+The result is written to `~/.config/deck/layout.json`, not to
+`sections.json`, so `omarchy plugin update` and the bundle cannot overwrite
+the arrangement. Delete that file to return to the registry defaults. A
+registry entry marked `"hidden": true` is only a default; it can be added from
+arrange mode, and it stays instantiated either way so its page is reachable.
+
+The same actions are available over IPC for keybinds and scripts:
+
+```bash
+omarchy-shell mutex-solutions.deck edit
+omarchy-shell mutex-solutions.deck setSize audio 4 1
+omarchy-shell mutex-solutions.deck setShown wifi true
+```
+
 ## The contract in one screen
 
 A section is a directory entry in `sections.json` plus a QML component:
