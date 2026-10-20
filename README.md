@@ -41,41 +41,74 @@ registry in its own checkout, so `omarchy plugin update` stays clean.
 
 ## Arranging the grid
 
-The grid is the surface. There is no edit mode:
+Outside edit mode the grid is a control surface: tap toggles, hold opens the
+section's page. Nothing can be added, removed, resized or moved.
 
-- **Drag a tile** to move it. The tile lifts, the one under the pointer takes
-  an accent outline, and dropping writes the new order.
+**Edit** in the header turns on direct manipulation:
+
+- **Drag a tile** to move it. The original dims, a floating copy follows the
+  pointer, and the tile under it takes an accent outline. Dropping writes the
+  new order.
 - **`×` on a tile** removes it from the grid. The section stays installed and
   moves to the add page.
-- **`+` in the header** opens **Add a control**. Every section is listed;
-  choose one, then a size. The size page renders the real tile at `1×1`,
-  `2×1`, `4×1` and, for a custom component, `2×2`, with the live section
-  inside. Choosing a size puts it on the deck and returns to the grid.
-- Sections already on the deck are listed on the add page too, so their size
-  choices never disappear: choosing another size resizes in place.
+- **`+`** opens **Add a control**. Choose a section, then a size. The size page
+  renders the real tile at `1×1`, `2×1`, `4×1` and, for a custom component,
+  `2×2`, with the live section inside. Choosing a size puts it on the deck.
+  Sections already on the deck are listed too, so choosing a size resizes in
+  place.
+- **Done** leaves edit mode. Esc walks back: size page → add page → grid →
+  leave edit → close.
 
 Order, sizes and visibility live in `~/.config/deck/layout.json`; the registry
 stays a catalogue. Delete the layout file to return to the registry defaults.
 A registry entry marked `"hidden": true` is only a default: it can be placed
 from the add page and stays instantiated either way so its page is reachable.
 
-The installer is `scripts/deck-add-section`; it can be run without the panel:
+## Sharing a deck
 
-```bash
-deck-add-section https://github.com/user/omarchy-plugin
-deck-add-section --id mutex-solutions.audio --section-id audio --title Audio
+**Export** on the add page writes `~/.config/deck/deck-layout.json`:
+
+```json
+{
+  "version": 1,
+  "kind": "deck-layout",
+  "order": ["audio", "display"],
+  "sections": [
+    { "id": "audio", "title": "Audio",
+      "pluginId": "mutex-solutions.audio",
+      "repo": "https://github.com/mutex-solutions/omarchy-audio",
+      "span": 2, "rows": 1 }
+  ]
+}
 ```
 
-The same actions are available over IPC for keybinds and scripts:
+It carries the sections that are on the deck, their order and sizes, and each
+section's git origin. Copy the file to another machine, put it anywhere, and
+press **Import** with that path. Import installs and registers missing sections
+from their repositories, then applies the order and sizes. A section with no
+repository (a local section) cannot be installed and is reported as missing.
+The import replaces the deck: registry sections not in the file are hidden, not
+uninstalled.
+
+The same operations work without the panel:
 
 ```bash
-omarchy-shell mutex-solutions.deck edit          # the add page
-omarchy-shell mutex-solutions.deck choose audio  # the size page
+deck-layout export [path]
+deck-layout import <path>
+deck-add-section https://github.com/user/omarchy-plugin
+```
+
+IPC for keybinds and scripts:
+
+```bash
+omarchy-shell mutex-solutions.deck arrange true   # edit mode
+omarchy-shell mutex-solutions.deck edit           # the add page
+omarchy-shell mutex-solutions.deck choose audio   # the size page
 omarchy-shell mutex-solutions.deck setSize audio 4 1
 omarchy-shell mutex-solutions.deck move audio display
-omarchy-shell mutex-solutions.deck setShown wifi true
-omarchy-shell mutex-solutions.deck install https://github.com/user/omarchy-plugin
-omarchy-shell mutex-solutions.deck status
+omarchy-shell mutex-solutions.deck shareExport
+omarchy-shell mutex-solutions.deck shareImport /path/to/deck-layout.json
+omarchy-shell mutex-solutions.deck shareStatusText
 ```
 
 ## The contract in one screen

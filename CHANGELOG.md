@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0
+
+- **Mutations are gated behind Edit.** Outside edit mode the grid is read-only:
+  tap toggles, hold opens the page, and there is no `+`, no `×` and no drag.
+  Edit shows `+` and `×`, enables dragging, and Done leaves it. Esc leaves edit
+  before it closes the panel.
+- **Share a deck.** Export writes `~/.config/deck/deck-layout.json` with the
+  order, sizes and every section's git origin. Import installs missing
+  sections from those repositories and applies the layout; sections without a
+  repository are reported as missing. The UI has Export and a path plus Import
+  on the add page; `scripts/deck-layout` does both from the command line.
+- IPC: `arrange`, `shareExport`, `shareImport`, `shareStatusText`.
+
 ## 0.4.0
 
 - **No edit mode.** The popup opens on the grid, as before. Tiles are direct:

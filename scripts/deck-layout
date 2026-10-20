@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+#
+# Export or import a shareable Deck layout.
+#
+#   deck-layout export [path]     default: ~/.config/deck/deck-layout.json
+#   deck-layout import <path>
+#
+# The file carries the sections that are on the deck, their order and sizes,
+# and each section's git repository. Import installs and registers anything
+# missing, then applies the order and sizes. Sections with no repository
+# cannot be installed on another machine and are reported as missing.
+#
+# One JSON object on stdout. Exit 0 only when the file was written (export)
+# or the layout was applied (import).
+
+set -euo pipefail
+
+PLUGINS="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins"
+USER_REG="${XDG_CONFIG_HOME:-$HOME/.config}/deck/sections.json"
+LAYOUT="${XDG_CONFIG_HOME:-$HOME/.config}/deck/layout.json"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ADD="$SCRIPT_DIR/deck-add-section"
+BUNDLED="$SCRIPT_DIR/../sections.json"
+DEFAULT_OUT="${XDG_CONFIG_HOME:-$HOME/.config}/deck/deck-layout.json"
+
+fail() { jq -nc --arg error "$1" '{ok:false,error:$error}' 2>/dev/null \
+  || printf '{"ok":false,"error":"%s"}\n' "$1"; exit 1; }
+
+command -v jq >/dev/null || fail "jq is required"
+
+registry() {
+  if [[ -f $USER_REG ]]; then printf '%s\n' "$USER_REG"
+  elif [[ -f $BUNDLED ]]; then printf '%s\n' "$BUNDLED"
+  fi
+}
+
+ENTRIES='{}'
+ORDER='[]'
+if [[ -f $LAYOUT ]]; then
+  ENTRIES="$(jq -c '.entries // {}' "$LAYOUT" 2>/dev/null || echo '{}')"
+  ORDER="$(jq -c '.order // []' "$LAYOUT" 2>/dev/null || echo '[]')"
+fi
+
+cmd="${1:-}"
+case "$cmd" in
+  export)
+    OUT="${2:-$DEFAULT_OUT}"
+    REG="$(registry)"
+    [[ -n $REG ]] || fail "no sections registry"
+
+    # Shown sections, in deck order. `layout` wins over the registry's default.
+    ROWS="$(jq -r --argjson entries "$ENTRIES" --argjson order "$ORDER" '
+      .sections
+      | map(. as $s | $s + { _shown: (($entries[$s.id].shown) // ($s.hidden != true)),
+                  _span: (($entries[$s.id].span) // $s.span // 2),
+                  _rows: (($entries[$s.id].rows) // $s.rows // 1),
+                  _order: (($order | index($s.id)) // 100000) })
+      | map(select(._shown == true))
+      | sort_by(._order)
+      | .[]
+      | [.id, (.title // .id), .file, ._span, ._rows] | @tsv' "$REG")"
+
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp" "$tmp.new"' EXIT
+    while IFS=$'\t' read -r id title file span rows; do
+      [[ -n $id ]] || continue
+      dir="$(dirname "$(dirname "$file")")"
+      plugin_id=""
+      repo=""
+      if [[ -f "$dir/manifest.json" ]]; then
+        plugin_id="$(jq -r '.id // empty' "$dir/manifest.json" 2>/dev/null || true)"
+        repo="$(git -C "$dir" remote get-url origin 2>/dev/null || true)"
+        repo="${repo%.git}"
+      fi
+      jq -nc --arg id "$id" --arg title "$title" --arg pluginId "$plugin_id" \
+        --arg repo "$repo" --argjson span "$span" --argjson rows "$rows" \
+        '{id:$id, title:$title, pluginId:$pluginId, repo:$repo, span:$span, rows:$rows}' \
+        >> "$tmp"
+    done <<< "$ROWS"
+
+    order="$(jq -r '.[] | .id' <(jq -s '.' "$tmp") 2>/dev/null | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+
+    mkdir -p "$(dirname "$OUT")"
+    jq -s --argjson order "$order" --arg exported "$(date -Iseconds)" \
+      '{version:1, kind:"deck-layout", exported:$exported, order:$order, sections:.}' \
+      "$tmp" > "$tmp.new"
+    mv "$tmp.new" "$OUT"
+    jq -nc --arg path "$OUT" --argjson count "$(jq -s 'length' "$tmp")" \
+      '{ok:true, action:"export", path:$path, count:$count}'
+    ;;
+
+  import)
+    IN="${2:-}"
+    [[ -n $IN ]] || fail "an import path is required"
+    [[ -f $IN ]] || fail "no such file: $IN"
+    jq -e '.kind == "deck-layout" and (.sections | type == "array")' "$IN" >/dev/null 2>&1 \
+      || fail "not a Deck layout file"
+
+    REG="$(registry)"
+    [[ -n $REG ]] || fail "no sections registry"
+
+    imported='[]'
+    installed='[]'
+    missing='[]'
+    order='[]'
+
+    count="$(jq '.sections | length' "$IN")"
+    for ((i = 0; i < count; i++)); do
+      row="$(jq -c --argjson i "$i" '.sections[$i]' "$IN")"
+      id="$(jq -r '.id // empty' <<< "$row")"
+      title="$(jq -r '.title // .id // empty' <<< "$row")"
+      plugin_id="$(jq -r '.pluginId // empty' <<< "$row")"
+      repo="$(jq -r '.repo // empty' <<< "$row")"
+      span="$(jq -r '.span // 2' <<< "$row")"
+      rows="$(jq -r '.rows // 1' <<< "$row")"
+      [[ -n $id ]] || continue
+
+      known="$(jq -r --arg id "$id" '[.sections[] | select(.id == $id)] | length' "$REG")"
+      if [[ $known == 0 ]]; then
+        [[ -n $repo ]] || { missing="$(jq -c --arg id "$id" '. + [$id]' <<< "$missing")"; continue; }
+        [[ -x $ADD ]] || fail "deck-add-section is missing"
+        if ! RES="$("$ADD" --id "$plugin_id" --section-id "$id" --title "$title" "$repo" 2>/dev/null)" \
+           || [[ "$(jq -r '.ok // false' <<< "$RES" 2>/dev/null)" != true ]]; then
+          missing="$(jq -c --arg id "$id" '. + [$id]' <<< "$missing")"
+          continue
+        fi
+        installed="$(jq -c --arg id "$id" '. + [$id]' <<< "$installed")"
+        REG="$(registry)"
+      fi
+
+      imported="$(jq -c --arg id "$id" --argjson span "$span" --argjson rows "$rows" \
+        '. + [{id:$id, span:$span, rows:$rows}]' <<< "$imported")"
+      order="$(jq -c --arg id "$id" '. + [$id]' <<< "$order")"
+    done
+
+    # Every registry section is in the resulting layout: the imported ones are
+    # shown, the rest are hidden. Hidden sections keep their place for later.
+    ENTRIES_NEW="$(jq -c --argjson imported "$imported" --argjson order "$order" '
+      (($imported | map({key:.id, value:{span:.span, rows:.rows}}) | from_entries)) as $sizes
+      | (.sections | map(.id)) as $ids
+      | reduce $ids[] as $id ({};
+          .[$id] = ( ($sizes[$id] // {}) + { shown: (($order | index($id)) != null) } )) ' "$REG")"
+
+    remaining="$(jq -c --argjson order "$order" '
+      [.sections[].id | select(($order | index(.)) == null)]' "$REG")"
+    full_order="$(jq -c --argjson order "$order" --argjson rest "$remaining" '. + $rest' <<< "$order")"
+
+    mkdir -p "$(dirname "$LAYOUT")"
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' EXIT
+    jq -n --argjson order "$full_order" --argjson entries "$ENTRIES_NEW" \
+      '{version:1, order:$order, entries:$entries}' > "$tmp"
+    mv "$tmp" "$LAYOUT"
+
+    jq -nc --argjson imported "$imported" --argjson installed "$installed" \
+      --argjson missing "$missing" --arg path "$IN" \
+      '{ok:true, action:"import", path:$path,
+        imported: ($imported | map(.id)), installed:$installed, missing:$missing}'
+    ;;
+
+  -h|--help|"")
+    sed -n '3,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    ;;
+  *)
+    fail "unknown action: $cmd"
+    ;;
+esac

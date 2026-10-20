@@ -61,6 +61,15 @@ Panel {
   property string _installOut: ""
   property string _installErr: ""
 
+  // Share/import. The file is the deck's order, sizes and each section's git
+  // origin, so another user can install what is missing and get the same deck.
+  property bool sharing: false
+  property string shareStatus: ""
+  property string shareError: ""
+  property string _shareOut: ""
+  property string _shareErr: ""
+  readonly property string sharePathDefault: Quickshell.env("HOME") + "/.config/deck/deck-layout.json"
+
   readonly property string layoutPath: Quickshell.env("HOME") + "/.config/deck/layout.json"
 
   // every arrangement a tile may take, in the order the size chip cycles
@@ -280,6 +289,33 @@ Panel {
     installProc.running = true
   }
 
+  function exportLayout() {
+    if (sharing) return
+    sharing = true
+    shareStatus = ""
+    shareError = ""
+    _shareOut = ""
+    _shareErr = ""
+    layoutProc.command = ["bash", root.pluginDir + "/scripts/deck-layout", "export"]
+    layoutProc.running = true
+  }
+
+  function importLayout(path) {
+    path = String(path || "").trim()
+    if (sharing) return
+    if (path === "") {
+      shareError = "Enter the path of a deck file"
+      return
+    }
+    sharing = true
+    shareStatus = ""
+    shareError = ""
+    _shareOut = ""
+    _shareErr = ""
+    layoutProc.command = ["bash", root.pluginDir + "/scripts/deck-layout", "import", path]
+    layoutProc.running = true
+  }
+
   function sizeLabelFor(entry) {
     if (!entry) return ""
     for (var i = 0; i < sizeChoices.length; i++)
@@ -337,6 +373,8 @@ Panel {
   // full previews for one control. Editing is a place you go, not a mode the
   // grid wears.
   property string view: "grid"
+  // Nothing on the grid is mutable unless this is on: no x, no drag, no +.
+  property bool editing: false
 
   // Handed to every page. close() is the only navigation a page may trigger;
   // notify() is a one-line message on the notice strip.
@@ -413,9 +451,21 @@ Panel {
     }
     function back() { root.closePage() }
     function edit() {
+      root.editing = true
       root.view = "catalog"
       root.closePage()
       root.open()
+    }
+    function arrange(on: bool) {
+      root.editing = on === true
+      root.view = "grid"
+      root.closePage()
+      root.open()
+    }
+    function shareExport() { root.exportLayout() }
+    function shareImport(path: string) { root.importLayout(String(path)) }
+    function shareStatusText(): string {
+      return root.shareError !== "" ? root.shareError : root.shareStatus
     }
     // Scriptable arrange actions, for a keybind or a reproducible setup.
     function setSize(id: string, span: int, rows: int) {
@@ -425,6 +475,7 @@ Panel {
       root.setShown(id, shown)
     }
     function choose(id: string) {
+      root.editing = true
       root.view = "size"
       root.chooserId = String(id)
       root.closePage()
@@ -432,6 +483,7 @@ Panel {
     }
     // Scriptable install and a readable result, for a keybind or a test.
     function install(url: string) {
+      root.editing = true
       root.view = "catalog"
       root.installSection(String(url), "", "", "")
     }
@@ -558,6 +610,49 @@ Panel {
       var message = result && result.error ? String(result.error)
         : (root._installErr || root._installOut || "Install failed")
       root.installError = message.trim()
+    }
+  }
+
+  Process {
+    id: layoutProc
+    command: []
+
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root._shareOut = String(text || "")
+    }
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root._shareErr = String(text || "")
+    }
+
+    onExited: function(code) {
+      root.sharing = false
+      var result = null
+      try { result = JSON.parse(root._shareOut || "{}") } catch (e) {}
+
+      if (code === 0 && result && result.ok === true) {
+        if (result.action === "export") {
+          root.shareStatus = "Saved " + String(result.count || 0) + " sections to "
+            + String(result.path || "")
+          return
+        }
+        var parts = ["Imported " + (result.imported ? result.imported.length : 0) + " sections"]
+        if (result.installed && result.installed.length)
+          parts.push("installed " + result.installed.join(", "))
+        if (result.missing && result.missing.length)
+          parts.push("missing " + result.missing.join(", "))
+        root.shareStatus = parts.join("; ")
+        root.reloadRegistry()
+        layoutFile.reload()
+        root.view = "grid"
+        root.editing = true
+        return
+      }
+
+      var message = result && result.error ? String(result.error)
+        : (root._shareErr || root._shareOut || "Share action failed")
+      root.shareError = message.trim()
     }
   }
 
@@ -758,6 +853,7 @@ Panel {
         if (root.pageOpen) root.closePage()
         else if (root.view === "size") root.view = "catalog"
         else if (root.view === "catalog") root.view = "grid"
+        else if (root.editing) root.editing = false
         else root.close()
       }
       onActivateRequested: root.close()
@@ -821,7 +917,9 @@ Panel {
 
         Rectangle {
           id: addChip
-          anchors.right: parent.right
+          visible: root.editing
+          anchors.right: editChip.left
+          anchors.rightMargin: Style.space(6)
           anchors.verticalCenter: parent.verticalCenter
           width: Style.space(22)
           height: Style.space(22)
@@ -848,6 +946,43 @@ Panel {
             onClicked: {
               root.view = "catalog"
               root.closePage()
+            }
+          }
+        }
+
+        Rectangle {
+          id: editChip
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          width: editText.implicitWidth + Style.space(16)
+          height: Style.space(20)
+          radius: Style.cornerRadius
+          color: editMouse.containsMouse
+            ? Util.alpha(Color.accent, Style.hoverFillAlpha)
+            : "transparent"
+          border.width: 1
+          border.color: Util.alpha(root.editing ? Color.accent : Color.foreground, 0.32)
+
+          Text {
+            id: editText
+            anchors.centerIn: parent
+            text: root.editing ? "Done" : "Edit"
+            color: root.editing ? Color.accent : Color.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          MouseArea {
+            id: editMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+              root.editing = !root.editing
+              if (!root.editing) {
+                root.view = "grid"
+                root.chooserId = ""
+              }
             }
           }
         }
@@ -896,9 +1031,10 @@ Panel {
             readonly property int rowspan: Number(modelData.rows) === 2 ? 2 : 1
 
             compact: span === 1 && rowspan === 1
-            draggable: true
-            removable: true
-            dropTarget: root.dropTargetId === modelData.id && root.draggingId !== ""
+            draggable: root.editing
+            removable: root.editing
+            dropTarget: root.editing && root.dropTargetId === modelData.id
+              && root.draggingId !== ""
             onRemoveRequested: root.setShown(modelData.id, false)
             onDragStarted: function(x, y) {
               var p = mapToItem(gridHost, x, y)
@@ -972,7 +1108,7 @@ Panel {
       Item {
         width: parent.width
         height: Style.space(24)
-        visible: !root.pageOpen && root.view === "catalog"
+        visible: !root.pageOpen && root.editing && root.view === "catalog"
 
         Rectangle {
           id: catalogBack
@@ -1040,7 +1176,10 @@ Panel {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: root.view = "grid"
+            onClicked: {
+              root.view = "grid"
+              root.editing = false
+            }
           }
         }
       }
@@ -1048,7 +1187,7 @@ Panel {
       Item {
         width: parent.width
         height: Style.space(18)
-        visible: !root.pageOpen && root.view === "catalog"
+        visible: !root.pageOpen && root.editing && root.view === "catalog"
 
         Text {
           width: parent.width
@@ -1065,7 +1204,7 @@ Panel {
         id: onGridList
         width: parent.width
         spacing: Style.space(2)
-        visible: !root.pageOpen && root.view === "catalog"
+        visible: !root.pageOpen && root.editing && root.view === "catalog"
 
         Item {
           width: parent.width
@@ -1111,7 +1250,7 @@ Panel {
         id: availableList
         width: parent.width
         spacing: Style.space(2)
-        visible: !root.pageOpen && root.view === "catalog"
+        visible: !root.pageOpen && root.editing && root.view === "catalog"
 
         Item {
           width: parent.width
@@ -1171,7 +1310,7 @@ Panel {
         id: githubAdd
         width: parent.width
         spacing: Style.space(4)
-        visible: !root.pageOpen && root.view === "catalog"
+        visible: !root.pageOpen && root.editing && root.view === "catalog"
 
         Item {
           width: parent.width
@@ -1270,6 +1409,146 @@ Panel {
         }
       }
 
+      // ---------------- page: share ----------------
+      Column {
+        id: shareBlock
+        width: parent.width
+        spacing: Style.space(4)
+        visible: !root.pageOpen && root.editing && root.view === "catalog"
+
+        Item {
+          width: parent.width
+          height: Style.space(22)
+
+          Text {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: "SHARE THIS DECK"
+            color: Util.alpha(Color.foreground, 0.45)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.letterSpacing: 1.5
+          }
+        }
+
+        Item {
+          width: parent.width
+          height: Style.space(24)
+
+          Rectangle {
+            id: exportChip
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: exportText.implicitWidth + Style.space(16)
+            height: Style.space(20)
+            radius: Style.cornerRadius
+            color: exportMouse.containsMouse && !root.sharing
+              ? Util.alpha(Color.accent, Style.hoverFillAlpha) : "transparent"
+            border.width: 1
+            border.color: Util.alpha(Color.accent, 0.45)
+            opacity: root.sharing ? 0.5 : 1.0
+
+            Text {
+              id: exportText
+              anchors.centerIn: parent
+              text: root.sharing ? "Working…" : "Export"
+              color: Color.accent
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+
+            MouseArea {
+              id: exportMouse
+              anchors.fill: parent
+              enabled: !root.sharing
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.exportLayout()
+            }
+          }
+        }
+
+        TextField {
+          id: shareField
+          width: parent.width
+          height: Style.space(28)
+          text: root.sharePathDefault
+          placeholderText: "Path to a deck file"
+          placeholderTextColor: Util.alpha(Color.foreground, 0.35)
+          color: Color.foreground
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          selectByMouse: true
+          background: Rectangle {
+            color: Util.alpha(Color.foreground, 0.05)
+            border.width: 1
+            border.color: Util.alpha(Color.foreground, 0.22)
+            radius: Style.cornerRadius
+          }
+          onAccepted: root.importLayout(text)
+        }
+
+        Item {
+          width: parent.width
+          height: Style.space(24)
+
+          Rectangle {
+            id: importChip
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: importText.implicitWidth + Style.space(16)
+            height: Style.space(20)
+            radius: Style.cornerRadius
+            color: importMouse.containsMouse && !root.sharing
+              ? Util.alpha(Color.accent, Style.hoverFillAlpha) : "transparent"
+            border.width: 1
+            border.color: Util.alpha(Color.foreground, 0.3)
+            opacity: root.sharing ? 0.5 : 1.0
+
+            Text {
+              id: importText
+              anchors.centerIn: parent
+              text: "Import"
+              color: Color.foreground
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+
+            MouseArea {
+              id: importMouse
+              anchors.fill: parent
+              enabled: !root.sharing
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.importLayout(shareField.text)
+            }
+          }
+
+          Text {
+            anchors.left: importChip.right
+            anchors.leftMargin: Style.space(8)
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.shareError !== "" ? root.shareError : root.shareStatus
+            color: root.shareError !== "" ? Color.urgent
+              : Util.alpha(Color.foreground, 0.55)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            elide: Text.ElideRight
+          }
+        }
+
+        Text {
+          width: parent.width
+          wrapMode: Text.Wrap
+          text: "Export writes the order, sizes and each section's repository. "
+            + "Import installs what is missing and applies the deck."
+          color: Util.alpha(Color.foreground, 0.35)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+        }
+      }
+
       // ---------------- page: size ----------------
       //
       // Full previews, one per size, rendered with the real Tile and the
@@ -1279,7 +1558,7 @@ Panel {
         id: sizeView
         width: parent.width
         spacing: Style.space(8)
-        visible: !root.pageOpen && root.view === "size"
+        visible: !root.pageOpen && root.editing && root.view === "size"
 
         readonly property var entry: root.catalogEntryById(root.chooserId)
 
@@ -1389,6 +1668,7 @@ Panel {
                     sizeOption.modelData.rows)
                   root.view = "grid"
                   root.chooserId = ""
+                  root.editing = true
                 }
               }
             }
@@ -1592,6 +1872,7 @@ Panel {
     if (!opened) {
       view = "grid"
       chooserId = ""
+      editing = false
     }
   }
 
