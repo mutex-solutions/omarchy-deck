@@ -50,6 +50,7 @@ SECTIONS=(
   "mutex-solutions.connectivity|https://github.com/mutex-solutions/omarchy-connectivity.git|Connectivity|2|2"
   "mutex-solutions.audio|https://github.com/mutex-solutions/omarchy-audio.git|Audio|2|1"
   "mutex-solutions.display|https://github.com/mutex-solutions/omarchy-display.git|Display|2"
+  "mutex-solutions.sessions|https://github.com/mutex-solutions/omarchy-sessions.git|Sessions|2|1"
   "mutex-solutions.nightlight|https://github.com/mutex-solutions/omarchy-nightlight.git|Night light|2"
   "mutex-solutions.lid-awake|https://github.com/mutex-solutions/omarchy-lid-awake.git|Lid Awake|2"
   "mutex-solutions.wifi|https://github.com/mutex-solutions/omarchy-wifi.git|Wi-Fi|2|1|hidden"

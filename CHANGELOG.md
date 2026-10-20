@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4
+
+- The bundle wires the **Sessions** section, for moving windows, workspaces
+  and whole sessions between displays. Window and workspace management moved
+  out of the Display page.
+
 ## 0.1.3
 
 - **Hidden sections.** A registry entry with `"hidden": true` is instantiated
