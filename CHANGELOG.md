@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.1
+
+- **Connectivity block is an optional section again**, for a compact 2x2
+  cluster without arranging four individual tiles. The catalogue calls it
+  "Connectivity block"; Wi-Fi, Bluetooth and Tailscale remain individual
+  sections, and the bundle still does not install the block.
+- Custom tiles draw the hold progress bar in the background colour with a
+  light edge, so it stays visible over a bright block. The connectivity
+  radios use a tinted active fill rather than solid accent.
+- The popup reopens on the deck: closing it clears any open section page.
+- `presets/connectivity-block.json`: the old deck as a shareable layout.
+
 ## 0.5.0
 
 - **Mutations are gated behind Edit.** Outside edit mode the grid is read-only:

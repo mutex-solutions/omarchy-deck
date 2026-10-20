@@ -1870,6 +1870,8 @@ Panel {
 
   onOpenedChanged: {
     if (!opened) {
+      // Reopen on the deck, never on the page that was last shown.
+      closePage()
       view = "grid"
       chooserId = ""
       editing = false

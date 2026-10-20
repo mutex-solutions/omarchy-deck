@@ -138,9 +138,14 @@ Item {
     id: progress
     anchors.left: parent.left
     anchors.bottom: parent.bottom
-    height: 2
+    height: tile.custom ? 3 : 2
     width: 0
-    color: Color.accent
+    // On a custom tile the body can be bright accent, so an accent bar would
+    // vanish into it. A dark bar with a light edge reads on both bright and
+    // dark bodies.
+    color: tile.custom ? Color.background : Color.accent
+    border.width: tile.custom ? 1 : 0
+    border.color: Util.alpha(Color.foreground, 0.6)
     visible: width > 0
   }
 

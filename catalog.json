@@ -2,6 +2,14 @@
   "version": 1,
   "sections": [
     {
+      "id": "mutex-solutions.connectivity",
+      "sectionId": "connectivity",
+      "title": "Connectivity block",
+      "icon": "≋",
+      "repo": "https://github.com/mutex-solutions/omarchy-connectivity",
+      "description": "The four radios as one 2x2 block (optional)"
+    },
+    {
       "id": "mutex-solutions.audio",
       "title": "Audio",
       "icon": "󰕾",

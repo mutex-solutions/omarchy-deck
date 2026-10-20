@@ -51,7 +51,9 @@ case "$cmd" in
     # Shown sections, in deck order. `layout` wins over the registry's default.
     ROWS="$(jq -r --argjson entries "$ENTRIES" --argjson order "$ORDER" '
       .sections
-      | map(. as $s | $s + { _shown: (($entries[$s.id].shown) // ($s.hidden != true)),
+      | map(. as $s | $s + { _shown: (if ($entries[$s.id] | type == "object" and has("shown"))
+                                    then $entries[$s.id].shown
+                                    else ($s.hidden != true) end),
                   _span: (($entries[$s.id].span) // $s.span // 2),
                   _rows: (($entries[$s.id].rows) // $s.rows // 1),
                   _order: (($order | index($s.id)) // 100000) })

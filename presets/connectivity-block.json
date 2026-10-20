@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "kind": "deck-layout",
+  "exported": "2026-10-21T01:30:46+07:00",
+  "order": [
+    "connectivity",
+    "audio",
+    "display",
+    "nightlight",
+    "lid-awake",
+    "sessions"
+  ],
+  "sections": [
+    {
+      "id": "connectivity",
+      "title": "Connectivity",
+      "pluginId": "mutex-solutions.connectivity",
+      "repo": "https://github.com/mutex-solutions/omarchy-connectivity",
+      "span": 2,
+      "rows": 2
+    },
+    {
+      "id": "audio",
+      "title": "Audio",
+      "pluginId": "mutex-solutions.audio",
+      "repo": "https://github.com/mutex-solutions/omarchy-audio",
+      "span": 2,
+      "rows": 1
+    },
+    {
+      "id": "display",
+      "title": "Display",
+      "pluginId": "mutex-solutions.display",
+      "repo": "https://github.com/mutex-solutions/omarchy-display",
+      "span": 2,
+      "rows": 1
+    },
+    {
+      "id": "nightlight",
+      "title": "Night light",
+      "pluginId": "mutex-solutions.nightlight",
+      "repo": "https://github.com/mutex-solutions/omarchy-nightlight",
+      "span": 2,
+      "rows": 1
+    },
+    {
+      "id": "lid-awake",
+      "title": "Lid Awake",
+      "pluginId": "mutex-solutions.lid-awake",
+      "repo": "https://github.com/mutex-solutions/omarchy-lid-awake",
+      "span": 2,
+      "rows": 1
+    },
+    {
+      "id": "sessions",
+      "title": "Sessions",
+      "pluginId": "mutex-solutions.sessions",
+      "repo": "https://github.com/mutex-solutions/omarchy-sessions",
+      "span": 2,
+      "rows": 1
+    }
+  ]
+}
