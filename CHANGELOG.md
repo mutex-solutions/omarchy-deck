@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2
+
+- `docs/UPSTREAM.md`: the sync rule for section authors. Reference Omarchy at
+  runtime (helpers, Quickshell modules, upstream `Service.qml` loaded by URL);
+  never copy behaviour, because a copy is a fork. The stock panel UI cannot be
+  embedded; sections render their own UI over upstream state.
+- `scripts/check-upstream.sh`: verifies every helper the sections call and the
+  Tailscale `Service.qml` members, so a moved seam fails loudly.
+
 ## 0.1.1
 
 - The page ScrollBar is hidden. It overlays the right edge of the page content
