@@ -284,7 +284,7 @@ Item {
 
   MouseArea {
     anchors.fill: parent
-    enabled: !tile.custom || tile.editing
+    enabled: !tile.custom
     preventStealing: true
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton
@@ -342,4 +342,41 @@ Item {
       }
     }
   }
+
+  // A custom body keeps its own buttons in edit mode, so dragging a custom
+  // tile is done from the grip. The rest of the tile stays interactive.
+  MouseArea {
+    id: gripDrag
+    visible: tile.custom && tile.editing
+    enabled: visible
+    x: 0
+    y: 0
+    width: Style.space(24)
+    height: Style.space(24)
+    z: 30
+    preventStealing: true
+    cursorShape: tile.dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+
+    onPressed: function(mouse) {
+      tile.dragging = true
+      tile.dragStarted(mouse.x, mouse.y)
+    }
+
+    onPositionChanged: function(mouse) {
+      if (pressed && tile.dragging) tile.dragMoved(mouse.x, mouse.y)
+    }
+
+    onReleased: function(mouse) {
+      if (!tile.dragging) return
+      tile.dragMoved(mouse.x, mouse.y)
+      tile.dragging = false
+      tile.dragFinished()
+    }
+
+    onCanceled: if (tile.dragging) {
+      tile.dragging = false
+      tile.dragFinished()
+    }
+  }
+
 }

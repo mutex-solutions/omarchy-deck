@@ -214,7 +214,7 @@ Panel {
 
   function setExtraRows(n) {
     extraRows = Math.max(0, Number(n) || 0)
-    saveLayout()
+    afterLayoutChange()
   }
 
   function placementById(id) {
@@ -292,7 +292,7 @@ Panel {
       }
     }
     layout = next
-    saveLayout()
+    afterLayoutChange()
   }
 
   function findCatalogEntry(sectionId) {
@@ -538,6 +538,47 @@ Panel {
       "printf '%s' " + Util.shellQuote(payload) + " > " + Util.shellQuote(root.layoutPath)])
   }
 
+  // Edit is staged. Changes update the live model for preview, but only Save
+  // writes layout.json; closing the panel or Cancel restores the snapshot.
+  function afterLayoutChange() {
+    if (editing) editDirty = true
+    else saveLayout()
+  }
+
+  function beginEdit() {
+    if (editing) return
+    editSnapshot = {
+      layout: JSON.parse(JSON.stringify(layout)),
+      order: order.slice(),
+      extraRows: extraRows
+    }
+    editDirty = false
+    editing = true
+  }
+
+  function cancelEdit() {
+    if (editSnapshot) {
+      layout = editSnapshot.layout
+      order = editSnapshot.order
+      extraRows = editSnapshot.extraRows
+    }
+    editSnapshot = null
+    editDirty = false
+    editing = false
+    view = "grid"
+    chooserId = ""
+    closePage()
+  }
+
+  function saveEdit() {
+    saveLayout()
+    editSnapshot = null
+    editDirty = false
+    editing = false
+    view = "grid"
+    chooserId = ""
+  }
+
   function updateLayout(id, patch) {
     var next = ({})
     for (var k in layout) next[k] = layout[k]
@@ -551,7 +592,7 @@ Panel {
     // hidden one keeps its place so re-adding it does not jump the queue.
     if (cur.shown === true && order.indexOf(String(id)) === -1)
       order = order.concat([String(id)])
-    saveLayout()
+    afterLayoutChange()
   }
 
   function setShown(id, shown) {
@@ -611,6 +652,8 @@ Panel {
   property string view: "grid"
   // Nothing on the grid is mutable unless this is on: no x, no drag, no +.
   property bool editing: false
+  property bool editDirty: false
+  property var editSnapshot: null
 
   // Handed to every page. close() is the only navigation a page may trigger;
   // notify() is a one-line message on the notice strip.
@@ -687,13 +730,14 @@ Panel {
     }
     function back() { root.closePage() }
     function edit() {
-      root.editing = true
+      root.beginEdit()
       root.view = "catalog"
       root.closePage()
       root.open()
     }
     function arrange(on: bool) {
-      root.editing = on === true
+      if (on === true) root.beginEdit()
+      else root.cancelEdit()
       root.view = "grid"
       root.closePage()
       root.open()
@@ -711,7 +755,7 @@ Panel {
       root.setShown(id, shown)
     }
     function choose(id: string) {
-      root.editing = true
+      root.beginEdit()
       root.view = "size"
       root.chooserId = String(id)
       root.closePage()
@@ -719,7 +763,7 @@ Panel {
     }
     // Scriptable install and a readable result, for a keybind or a test.
     function install(url: string) {
-      root.editing = true
+      root.beginEdit()
       root.view = "catalog"
       root.installSection(String(url), "", "", "")
     }
@@ -739,6 +783,9 @@ Panel {
     }
     function canvasRows(n: int) {
       root.setExtraRows(n)
+    }
+    function saveEdits() {
+      root.saveEdit()
     }
   }
 
@@ -889,7 +936,7 @@ Panel {
         root.reloadRegistry()
         layoutFile.reload()
         root.view = "grid"
-        root.editing = true
+        root.beginEdit()
         return
       }
 
@@ -1102,7 +1149,7 @@ Panel {
         if (root.pageOpen) root.closePage()
         else if (root.view === "size") root.view = "catalog"
         else if (root.view === "catalog") root.view = "grid"
-        else if (root.editing) root.editing = false
+        else if (root.editing) root.cancelEdit()
         else root.close()
       }
       onActivateRequested: root.close()
@@ -1142,17 +1189,110 @@ Panel {
         }
 
         Rectangle {
+          id: editChip
+          visible: !root.editing
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          width: editText.implicitWidth + Style.space(16)
+          height: Style.space(20)
+          radius: Style.cornerRadius
+          color: editMouse.containsMouse
+            ? Util.alpha(Color.accent, Style.hoverFillAlpha) : "transparent"
+          border.width: 1
+          border.color: Util.alpha(Color.foreground, 0.32)
+
+          Text {
+            id: editText
+            anchors.centerIn: parent
+            text: "Edit"
+            color: Color.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          MouseArea {
+            id: editMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.beginEdit()
+          }
+        }
+
+        Rectangle {
+          id: saveChip
+          visible: root.editing
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          width: saveText.implicitWidth + Style.space(16)
+          height: Style.space(20)
+          radius: Style.cornerRadius
+          color: saveMouse.containsMouse
+            ? Util.alpha(Color.accent, Style.hoverFillAlpha) : "transparent"
+          border.width: 1
+          border.color: Util.alpha(Color.accent, 0.55)
+
+          Text {
+            id: saveText
+            anchors.centerIn: parent
+            text: "Save"
+            color: Color.accent
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          MouseArea {
+            id: saveMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.saveEdit()
+          }
+        }
+
+        Rectangle {
+          id: cancelChip
+          visible: root.editing
+          anchors.right: saveChip.left
+          anchors.rightMargin: Style.space(6)
+          anchors.verticalCenter: parent.verticalCenter
+          width: cancelText.implicitWidth + Style.space(16)
+          height: Style.space(20)
+          radius: Style.cornerRadius
+          color: cancelMouse.containsMouse
+            ? Util.alpha(Color.foreground, Style.hoverFillAlpha) : "transparent"
+          border.width: 1
+          border.color: Util.alpha(Color.foreground, 0.32)
+
+          Text {
+            id: cancelText
+            anchors.centerIn: parent
+            text: "Cancel"
+            color: Color.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          MouseArea {
+            id: cancelMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.cancelEdit()
+          }
+        }
+
+        Rectangle {
           id: addChip
           visible: root.editing
-          anchors.right: editChip.left
+          anchors.right: cancelChip.left
           anchors.rightMargin: Style.space(6)
           anchors.verticalCenter: parent.verticalCenter
           width: addText.implicitWidth + Style.space(16)
           height: Style.space(20)
           radius: Style.cornerRadius
           color: addMouse.containsMouse
-            ? Util.alpha(Color.accent, Style.hoverFillAlpha)
-            : "transparent"
+            ? Util.alpha(Color.accent, Style.hoverFillAlpha) : "transparent"
           border.width: 1
           border.color: Util.alpha(Color.accent, 0.45)
 
@@ -1173,43 +1313,6 @@ Panel {
             onClicked: {
               root.view = "catalog"
               root.closePage()
-            }
-          }
-        }
-
-        Rectangle {
-          id: editChip
-          anchors.right: parent.right
-          anchors.verticalCenter: parent.verticalCenter
-          width: editText.implicitWidth + Style.space(16)
-          height: Style.space(20)
-          radius: Style.cornerRadius
-          color: editMouse.containsMouse
-            ? Util.alpha(Color.accent, Style.hoverFillAlpha)
-            : "transparent"
-          border.width: 1
-          border.color: Util.alpha(root.editing ? Color.accent : Color.foreground, 0.32)
-
-          Text {
-            id: editText
-            anchors.centerIn: parent
-            text: root.editing ? "Done" : "Edit"
-            color: root.editing ? Color.accent : Color.foreground
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-          }
-
-          MouseArea {
-            id: editMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-              root.editing = !root.editing
-              if (!root.editing) {
-                root.view = "grid"
-                root.chooserId = ""
-              }
             }
           }
         }
@@ -1518,7 +1621,7 @@ Panel {
           Text {
             id: doneText
             anchors.centerIn: parent
-            text: "Done"
+            text: "Grid"
             color: Color.accent
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -1529,10 +1632,7 @@ Panel {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: {
-              root.view = "grid"
-              root.editing = false
-            }
+            onClicked: root.view = "grid"
           }
         }
       }
@@ -2023,7 +2123,7 @@ Panel {
                     sizeOption.modelData.rows)
                   root.view = "grid"
                   root.chooserId = ""
-                  root.editing = true
+                  root.beginEdit()
                 }
               }
             }
@@ -2225,7 +2325,8 @@ Panel {
 
   onOpenedChanged: {
     if (!opened) {
-      // Reopen on the deck, never on the page that was last shown.
+      // Clicking out of edit mode discards the staged layout.
+      if (editing) cancelEdit()
       closePage()
       view = "grid"
       chooserId = ""

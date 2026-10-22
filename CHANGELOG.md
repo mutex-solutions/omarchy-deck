@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.0
+
+- **Editing is staged.** Entering Edit snapshots the layout. Adding, removing,
+  moving, resizing and canvas rows update the preview but do not write
+  `layout.json`. The header now has **Save** and **Cancel**; Save writes, Cancel
+  restores. Clicking outside the panel or pressing Esc while editing restores
+  the snapshot and leaves edit mode.
+- **Custom tiles stay interactive while editing.** The host drag no longer
+  covers a custom body: its own buttons (audio slider and mute, connectivity
+  radios, page taps) still work. Drag a custom tile by the grip in its top-left
+  corner.
+- The add page's Done is now **Grid** and returns to the staged deck; it does
+  not discard or save.
+- Registry changes from installing a plugin are immediate; only the layout is
+  staged.
+
 ## 0.8.2
 
 - The empty canvas exists **only in edit mode**. Leaving edit collapses the

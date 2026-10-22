@@ -44,21 +44,28 @@ registry in its own checkout, so `omarchy plugin update` stays clean.
 Outside edit mode the grid is a control surface: tap toggles, hold opens the
 section's page. Nothing can be added, removed, resized or moved.
 
-**Edit** turns on direct manipulation:
+**Edit** is staged. The header shows **+ Add**, **Cancel** and **Save**; the
+canvas and every change are previews until Save writes `layout.json`. Cancel
+or clicking outside the panel discards the staged layout and restores the last
+saved one.
+
+Inside edit mode:
 
 - **Drag a tile to any cell.** The grid is four columns wide and as tall as it
   needs to be. The landing slot snaps to the cells under the pointer.
 - A tile dropped over another one **displaces** it: the overlapped tile moves
   to the first free cells, so a `1x1` can take a cell inside a `2x2` or `2x1`
   area. This is what makes a 2x2 block of four individual `1x1` tiles possible.
-- **`×`** removes a tile; **Done** leaves edit. **+ Add** opens the catalogue.
+- **`×`** removes a tile; **Save** writes the layout; **Cancel** discards it.
+  **+ Add** opens the catalogue.
 - Choosing a size keeps the tile's cell if the new size fits, otherwise it
   finds the first free cells.
 
 Positions are stored per section as `col`/`row` in
 `~/.config/deck/layout.json`; the linear `order` is only the seed for tiles
 that have never been placed. Sections already on the deck are listed on the
-add page too, so choosing a size resizes in place.
+add page too, so choosing a size resizes in place. A custom tile keeps its own
+buttons clickable in edit mode; drag it by the grip in its top-left corner.
 
 A registry entry marked `"hidden": true` is only a default: it can be placed
 from the add page and stays instantiated either way so its page is reachable.
@@ -100,7 +107,9 @@ deck-add-section https://github.com/user/omarchy-plugin
 IPC for keybinds and scripts:
 
 ```bash
-omarchy-shell mutex-solutions.deck arrange true   # edit mode
+omarchy-shell mutex-solutions.deck arrange true   # begin a staged edit
+omarchy-shell mutex-solutions.deck saveEdits      # write the staged layout
+omarchy-shell mutex-solutions.deck arrange false  # cancel the staged edit
 omarchy-shell mutex-solutions.deck edit           # the add page
 omarchy-shell mutex-solutions.deck choose audio   # the size page
 omarchy-shell mutex-solutions.deck setSize audio 4 1
