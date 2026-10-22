@@ -139,6 +139,30 @@ Panel {
   // is only the seed for tiles that have not been placed yet.
 
   readonly property real gridGap: Style.space(9)
+
+  // How tall the card may be: what the screen leaves, up to a ceiling that
+  // keeps it a popup rather than a wall. A fixed number clipped the Audio
+  // page's equaliser on a screen with plenty of room.
+  readonly property real panelCap: Math.min(
+    panel.availableCardHeight > 0 ? panel.availableCardHeight : Style.space(720),
+    Style.space(720))
+  // A page scrolls inside the card, under the back row and its spacing.
+  readonly property real pageMaxHeight: Math.max(Style.space(240),
+    panelCap - panel.verticalContentInset - Style.space(24 + 10))
+
+  // Whether the page scrolls decides whether a gutter is reserved, and the
+  // gutter narrows the page, which can change its height. Decided on the way up
+  // and down at different heights, so a page sitting right at the cap cannot
+  // flip the gutter on and off every layout pass.
+  readonly property real pageImplicitHeight: pageLoader.item ? pageLoader.item.implicitHeight : 0
+  property bool pageScrolls: false
+  function updatePageScrolls() {
+    pageScrolls = pageImplicitHeight > pageMaxHeight - (pageScrolls ? Style.space(48) : 0)
+  }
+  onPageImplicitHeightChanged: updatePageScrolls()
+  onPageMaxHeightChanged: updatePageScrolls()
+  onPageSourceChanged: updatePageScrolls()
+
   readonly property real gridUnit: Math.max(1, (gridHost.width - 3 * gridGap) / 4)
 
   function placementFits(list, col, row, span, rows, skipId) {
@@ -158,7 +182,8 @@ Panel {
       for (var col = 0; col <= 4 - span; col++)
         if (placementFits(list, col, row, span, rows, skipId))
           return { col: col, row: row }
-    return { col: 0, row: 0 }
+    // Nothing fits in 100 rows: go below everything rather than on top of it.
+    return { col: 0, row: 100 }
   }
 
   readonly property var placements: {
@@ -257,7 +282,6 @@ Panel {
     for (var k = 0; k < overlapped.length; k++) {
       var o = overlapped[k]
       var pos = firstFreePlace(next, o.span, o.rows, o.id)
-      if (pos === null) return null
       next.push({ id: o.id, title: o.title, file: o.file, page: o.page,
                   span: o.span, rows: o.rows, col: pos.col, row: pos.row })
     }
@@ -534,8 +558,11 @@ Panel {
 
   function saveLayout() {
     var payload = JSON.stringify({ version: 1, order: order, extraRows: extraRows, entries: layout })
+    // Write beside the target and rename, so a crash mid-write cannot leave an
+    // empty layout.json that the next load reads as "no layout".
     Quickshell.execDetached(["bash", "-c",
-      "printf '%s' " + Util.shellQuote(payload) + " > " + Util.shellQuote(root.layoutPath)])
+      "printf '%s' \"$1\" > \"$2.tmp\" && mv -f \"$2.tmp\" \"$2\"",
+      "deck-save", payload, root.layoutPath])
   }
 
   // Edit is staged. Changes update the live model for preview, but only Save
@@ -994,9 +1021,12 @@ Panel {
         elide: Text.ElideRight
       }
 
+      // The section header already says "On the grid"; repeating it under
+      // every name is noise.
       Text {
+        visible: !row.onGrid
         width: parent.width
-        text: row.onGrid ? "On the grid" : (row.canSize ? "Installed" : "Not installed")
+        text: row.canSize ? "Installed" : "Not installed"
         color: Util.alpha(Color.foreground, 0.45)
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -1136,10 +1166,12 @@ Panel {
     // A minimum matters because the content is inside a ScrollView: before the
     // popup has a width the grid's implicitHeight is 0, and a zero-height popup
     // is closed by the host before it can lay out.
+    // The floor only guards that first, empty frame; once there is content it
+    // must not pad a short page (Night light, Lid Awake) with dead space.
     contentHeight: Math.max(
-      root.view === "grid" ? Style.space(180) : Style.space(360),
-      panel.fittedContentHeight(content.implicitHeight,
-        root.view === "grid" ? Style.space(560) : Style.space(660)))
+      content.implicitHeight > 0 ? 0
+        : (root.view === "grid" ? Style.space(180) : Style.space(360)),
+      panel.fittedContentHeight(content.implicitHeight, root.panelCap))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -1228,15 +1260,15 @@ Panel {
           height: Style.space(20)
           radius: Style.cornerRadius
           color: saveMouse.containsMouse
-            ? Util.alpha(Color.accent, Style.hoverFillAlpha) : "transparent"
+            ? Color.accent : Util.alpha(Color.accent, 0.85)
           border.width: 1
-          border.color: Util.alpha(Color.accent, 0.55)
+          border.color: Color.accent
 
           Text {
             id: saveText
             anchors.centerIn: parent
             text: "Save"
-            color: Color.accent
+            color: Color.background
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
           }
@@ -1334,7 +1366,7 @@ Panel {
         Text {
           anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
-          text: "Canvas"
+          text: "CANVAS"
           color: Util.alpha(Color.foreground, 0.45)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -1645,7 +1677,7 @@ Panel {
         Text {
           width: parent.width
           anchors.verticalCenter: parent.verticalCenter
-          text: "Choose a control, then a size. Choosing a size puts it on the deck."
+          text: "Pick a control, then a size."
           color: Util.alpha(Color.foreground, 0.45)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -2069,9 +2101,10 @@ Panel {
 
             readonly property var entry: sizeView.entry
             readonly property var sectionItem: entry ? root.sectionMap[String(entry.id)] : null
-            readonly property real gap: Style.space(6)
-            readonly property real unit: Math.max(Style.space(30),
-              Math.floor((sizeView.width - 3 * gap - Style.space(16)) / 4))
+            // The deck's own gap and unit, so a preview is the size the tile
+            // will actually be.
+            readonly property real gap: root.gridGap
+            readonly property real unit: Math.max(1, (sizeView.width - 3 * gap) / 4)
             readonly property real tileW: modelData.rows === 2
               ? 2 * unit + gap
               : modelData.span * unit + (modelData.span - 1) * gap
@@ -2093,25 +2126,25 @@ Panel {
               font.bold: sizeOption.current
             }
 
-            Rectangle {
-              width: sizeOption.tileW + Style.space(4)
-              height: sizeOption.tileH + Style.space(4)
-              color: sizeOption.current
-                ? Util.alpha(Color.accent, 0.06) : "transparent"
-              border.width: sizeOption.current ? 2 : 1
-              border.color: sizeOption.current
-                ? Util.alpha(Color.accent, 0.85)
-                : Util.alpha(Color.foreground, 0.12)
-              radius: Style.cornerRadius
-              clip: true
+            Item {
+              width: sizeOption.tileW
+              height: sizeOption.tileH
 
               Tile {
                 anchors.fill: parent
-                anchors.margins: 2
                 section: sizeOption.sectionItem
                 span: sizeOption.modelData.span
                 rowspan: sizeOption.modelData.rows
                 compact: sizeOption.modelData.span === 1 && sizeOption.modelData.rows === 1
+              }
+
+              Rectangle {
+                visible: sizeOption.current
+                anchors.fill: parent
+                radius: Style.cornerRadius
+                color: "transparent"
+                border.width: 2
+                border.color: Util.alpha(Color.accent, 0.85)
               }
 
               MouseArea {
@@ -2281,45 +2314,69 @@ Panel {
           }
         }
 
-        // Pages can be long (a network list, a device list). Cap the height and
-        // scroll rather than letting the panel grow past the screen.
-        ScrollView {
-          id: pageScroll
+        // Pages can be long (a network list, a device list, an equaliser). The
+        // cap follows the room the screen leaves, not a fixed height, and a
+        // thumb shows that there is more below.
+        Item {
           width: parent.width
-          height: Math.min(pageLoader.item ? pageLoader.item.implicitHeight : 0, Style.space(420))
-          clip: true
-          ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-          // No visible scrollbar: it overlays the right edge of the page
-          // content (the display page's rate control and switches) and blocks
-          // them. The view still scrolls by wheel and touch.
-          ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+          height: pageScroll.height
 
-          Loader {
-            id: pageLoader
-            width: pageScroll.availableWidth
-            source: root.pageSource
-          // The page is a VIEW of the section, not a second copy of its state:
-          // it is handed the live instance. Tile and page cannot disagree.
-          onLoaded: {
-            if (!item) return
-            if ("section" in item) item.section = root.sectionMap[String(root.pageSectionId)]
-            if ("host" in item) item.host = root.host
-            // Sections from other repositories keep their logic in a `state`
-            // object; the page is rendered by both Deck and the standalone
-            // widget, so it binds to `state` rather than to Deck's wrapper.
-            if ("state" in item) {
-              var sec = root.sectionMap[String(root.pageSectionId)]
-              item.state = sec && sec.state ? sec.state : sec
+          ScrollView {
+            id: pageScroll
+            // A gutter is reserved only while the page scrolls, for the position
+            // mark; it overlays nothing, and a short page keeps its full width.
+            width: parent.width - (root.pageScrolls ? Style.space(8) : 0)
+            height: Math.min(pageLoader.item ? pageLoader.item.implicitHeight : 0, root.pageMaxHeight)
+            clip: true
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            // No visible scrollbar: it overlays the right edge of the page
+            // content (the display page's rate control and switches) and blocks
+            // them. The view still scrolls by wheel and touch.
+            ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+
+            Loader {
+              id: pageLoader
+              width: pageScroll.availableWidth
+              source: root.pageSource
+            // The page is a VIEW of the section, not a second copy of its state:
+            // it is handed the live instance. Tile and page cannot disagree.
+            onLoaded: {
+              if (!item) return
+              if ("section" in item) item.section = root.sectionMap[String(root.pageSectionId)]
+              if ("host" in item) item.host = root.host
+              // Sections from other repositories keep their logic in a `state`
+              // object; the page is rendered by both Deck and the standalone
+              // widget, so it binds to `state` rather than to Deck's wrapper.
+              if ("state" in item) {
+                var sec = root.sectionMap[String(root.pageSectionId)]
+                item.state = sec && sec.state ? sec.state : sec
+              }
+            }
+              onStatusChanged: {
+                if (status === Loader.Error)
+                  console.warn("deck: failed to load page", root.pageSource, pageLoader.errorString)
+              }
             }
           }
-            onStatusChanged: {
-              if (status === Loader.Error)
-                console.warn("deck: failed to load page", root.pageSource, pageLoader.errorString)
-            }
+
+          ScrollThumb {
+            view: pageScroll
+            anchors.right: parent.right
+            anchors.rightMargin: 0
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
           }
         }
       }
     }
+    }
+
+    ScrollThumb {
+      view: contentScroll
+      anchors.right: parent.right
+      anchors.rightMargin: 0
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
     }
   }
 

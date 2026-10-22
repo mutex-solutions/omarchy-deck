@@ -65,6 +65,8 @@ Item {
 
   property bool hovered: false
   property bool didLongPress: false
+  // A press that slid off the tile is abandoned: it neither holds nor toggles.
+  property bool pressAbandoned: false
 
   opacity: tile.dragging ? 0.25 : 1.0
 
@@ -127,26 +129,38 @@ Item {
     }
   }
 
+  // The glyph sits in a fixed cell, so the text column starts at the same x
+  // on every tile whatever glyph or font a section's icon falls back to. A
+  // custom body that lays out its own icon should use the same cell
+  // (iconCell wide, Style.space(12) in from the tile edge); see CONTRACT.md.
+  readonly property real iconCell: Style.space(28)
+
   Item {
     visible: !tile.custom && !tile.compact
     anchors.fill: parent
     anchors.margins: Style.space(12)
 
-    Text {
-      id: iconText
+    Item {
+      id: iconBox
       anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      text: tile.icon
-      color: tile.active ? Color.accent : Color.foreground
-      font.family: Style.font.family
-      // Nerd Font glyphs sit small inside their em box; at heading size they
-      // read as punctuation next to the label.
-      font.pixelSize: Style.font.display
+      anchors.top: parent.top
+      anchors.bottom: parent.bottom
+      width: tile.iconCell
+
+      Text {
+        anchors.centerIn: parent
+        text: tile.icon
+        color: tile.active ? Color.accent : Color.foreground
+        font.family: Style.font.family
+        // Nerd Font glyphs sit small inside their em box; at heading size they
+        // read as punctuation next to the label.
+        font.pixelSize: Style.font.display
+      }
     }
 
     Column {
-      anchors.left: iconText.right
-      anchors.leftMargin: Style.space(11)
+      anchors.left: iconBox.right
+      anchors.leftMargin: Style.space(8)
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.space(3)
@@ -164,14 +178,13 @@ Item {
       Text {
         width: parent.width
         text: tile.detail
-        color: Util.alpha(Color.foreground, tile.active ? 0.75 : 0.55)
+        color: Util.alpha(Color.foreground, tile.active ? 0.75 : 0.6)
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
         elide: Text.ElideRight
       }
     }
   }
-
 
   // Hold indicator. Width is animated, not a spinner: the eye reads "still
   // holding" from progress, and a tap stops before this is ever visible.
@@ -274,9 +287,12 @@ Item {
       font.pixelSize: Style.font.caption
     }
 
+    // The disc stays small so it does not crowd the tile; the hit area does
+    // not, because a 16 px target is too small for a finger.
     MouseArea {
       id: removeMouse
       anchors.fill: parent
+      anchors.margins: -Style.space(6)
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: tile.removeRequested()
@@ -304,6 +320,7 @@ Item {
 
     onPressed: function(mouse) {
       tile.didLongPress = false
+      tile.pressAbandoned = false
       pressPoint = Qt.point(mouse.x, mouse.y)
       if (!tile.editing) {
         holdTimer.start()
@@ -317,7 +334,14 @@ Item {
         tile.dragMoved(mouse.x, mouse.y)
         return
       }
-      if (!tile.draggable || !movedEnough(mouse.x, mouse.y)) return
+      if (!tile.draggable) {
+        if (!tile.pressAbandoned && !tile.editing && movedEnough(mouse.x, mouse.y)) {
+          tile.pressAbandoned = true
+          tile.endPress()
+        }
+        return
+      }
+      if (!movedEnough(mouse.x, mouse.y)) return
       // A drag is not a hold: cancel the hold before it can navigate away.
       tile.endPress()
       tile.dragging = true
@@ -333,7 +357,8 @@ Item {
         return
       }
       tile.endPress()
-      if (!tile.editing && !tile.didLongPress) tile.toggled()
+      var inside = mouse.x >= 0 && mouse.x <= width && mouse.y >= 0 && mouse.y <= height
+      if (!tile.editing && !tile.didLongPress && !tile.pressAbandoned && inside) tile.toggled()
     }
 
     onCanceled: function(mouse) {

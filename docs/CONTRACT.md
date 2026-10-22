@@ -57,10 +57,27 @@ Required:
 | `section` | var | injected: the live section instance |
 | `host` | var | injected: `{ open, close(), notify(text) }` |
 
+A custom body that draws its own icon should put it in the same fixed cell as
+Deck's default body: a cell `Style.space(28)` wide, `Style.space(12)` in from
+the tile edge, with the glyph centred in it, and the text column starting
+`Style.space(8)` after the cell. Anchoring text to the glyph's own edge makes
+the column move with the glyph's width, and glyphs from different fonts differ
+by several pixels. Colour the glyph accent only when `active`.
+
+Prefer glyphs from one family (Material Design in Nerd Fonts). Mixing Unicode
+symbols with Nerd Font glyphs gives icons of visibly different size and weight.
+
 A custom body owns its own clicks. While the deck is in edit mode the host
 gesture sits above it, so the tile can still be dragged and held. A section
 with none of the four size components gets Deck's default body: icon, title
 and detail, or icon and title at 1x1.
+
+A page taller than the room the screen leaves scrolls inside the card. Deck
+draws a position mark in a gutter it reserves only while the page scrolls, and
+the page does not need to do anything about it. A page must not assume a fixed
+height, and any control that tracks a drag (a slider) must set
+`preventStealing: true` on its MouseArea, or the page's scrolling takes the
+grab when the pointer wanders vertically and the drag stops.
 
 The page renders content only. The host draws the back button, the title, and
 the frame. A page that draws its own back button is a contract violation.

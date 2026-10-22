@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.9.2
+
+- **Pages show that they scroll.** A page was capped at a fixed 420 px with its
+  scrollbar hidden, so anything past the fold (the whole Audio equaliser, the
+  Wi-Fi list, the Add page's sharing controls, the second extra canvas row)
+  looked missing. The cap now follows the room the screen leaves, and a thin
+  position mark sits in a gutter that is reserved only while the page scrolls.
+  The card has the same mark for the Add and canvas views.
+- **Tile text lines up.** The default tile body anchored its text to the glyph's
+  right edge, so the text column moved with the glyph's width and font. The
+  glyph now sits in a fixed cell (`Style.space(28)`, in `Style.space(12)` from
+  the edge) and custom bodies are asked to use the same one.
+- **A press can be abandoned.** Pressing a tile, sliding off it and releasing
+  no longer toggles it or opens its page.
+- **Bigger remove target.** The x on a tile keeps its small disc but has a
+  hit area 12 px larger, for touch.
+- **Short pages are no longer padded.** The 180 px floor on the card now only
+  guards the first, empty frame, so Night light and Lid Awake end under their
+  last line.
+- **Size previews are the real size.** They used a 6 px gap and took 16 px off
+  the width, so the 4x1 preview ended short of the edge. They now use the
+  deck's own gap and unit.
+- **Add page.** "On the grid" is no longer repeated under every name, and the
+  intro line fits instead of ending in an ellipsis.
+- **Save is the primary action** in edit mode (filled), and the canvas label
+  matches the DECK label.
+- `layout.json` is written to a temporary file and renamed, so a crash
+  mid-write cannot leave it empty. `firstFreePlace` no longer returns a
+  position on top of another tile when the grid is full, and the unreachable
+  null check after it is gone.
+
 ## 0.9.1
 
 - **Edit mode is position-only.** A press in edit mode never starts the hold
