@@ -44,27 +44,22 @@ registry in its own checkout, so `omarchy plugin update` stays clean.
 Outside edit mode the grid is a control surface: tap toggles, hold opens the
 section's page. Nothing can be added, removed, resized or moved.
 
-**Edit** in the header turns on direct manipulation:
+**Edit** turns on direct manipulation:
 
-- Tiles can look different at each size. A section may supply `tileCompact`,
-  `tileHalf`, `tileFull` and `tileSquare`; the default body is icon, title and
-  detail. Audio's 4x1 tile adds a volume slider, Display lists its monitors,
-  and Sessions lists windows per monitor.
-- **Drag a tile** to move it. The original dims, a floating copy follows the
-  pointer, and the tile under it takes an accent outline. Dropping writes the
-  new order.
-- **`×` on a tile** removes it from the grid. The section stays installed and
-  moves to the add page.
-- **`+`** opens **Add a control**. Choose a section, then a size. The size page
-  renders the real tile at `1×1`, `2×1`, `4×1` and, for a custom component,
-  `2×2`, with the live section inside. Choosing a size puts it on the deck.
-  Sections already on the deck are listed too, so choosing a size resizes in
-  place.
-- **Done** leaves edit mode. Esc walks back: size page → add page → grid →
-  leave edit → close.
+- **Drag a tile to any cell.** The grid is four columns wide and as tall as it
+  needs to be. The landing slot snaps to the cells under the pointer.
+- A tile dropped over another one **displaces** it: the overlapped tile moves
+  to the first free cells, so a `1x1` can take a cell inside a `2x2` or `2x1`
+  area. This is what makes a 2x2 block of four individual `1x1` tiles possible.
+- **`×`** removes a tile; **Done** leaves edit. **+ Add** opens the catalogue.
+- Choosing a size keeps the tile's cell if the new size fits, otherwise it
+  finds the first free cells.
 
-Order, sizes and visibility live in `~/.config/deck/layout.json`; the registry
-stays a catalogue. Delete the layout file to return to the registry defaults.
+Positions are stored per section as `col`/`row` in
+`~/.config/deck/layout.json`; the linear `order` is only the seed for tiles
+that have never been placed. Sections already on the deck are listed on the
+add page too, so choosing a size resizes in place.
+
 A registry entry marked `"hidden": true` is only a default: it can be placed
 from the add page and stays instantiated either way so its page is reachable.
 

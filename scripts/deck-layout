@@ -60,11 +60,13 @@ case "$cmd" in
       | map(select(._shown == true))
       | sort_by(._order)
       | .[]
-      | [.id, (.title // .id), .file, ._span, ._rows] | @tsv' "$REG")"
+      | [.id, (.title // .id), .file, ._span, ._rows,
+          (($entries[.id].col) // "" | tostring),
+          (($entries[.id].row) // "" | tostring)] | @tsv' "$REG")"
 
     tmp="$(mktemp)"
     trap 'rm -f "$tmp" "$tmp.new"' EXIT
-    while IFS=$'\t' read -r id title file span rows; do
+    while IFS=$'\t' read -r id title file span rows col row; do
       [[ -n $id ]] || continue
       dir="$(dirname "$(dirname "$file")")"
       plugin_id=""
@@ -77,8 +79,11 @@ case "$cmd" in
       rel="${file#"$dir"/}"
       jq -nc --arg id "$id" --arg title "$title" --arg pluginId "$plugin_id" \
         --arg repo "$repo" --arg sectionFile "$rel" --argjson span "$span" --argjson rows "$rows" \
+        --arg col "$col" --arg row "$row" \
         '{id:$id, title:$title, pluginId:$pluginId, repo:$repo,
-          sectionFile:$sectionFile, span:$span, rows:$rows}' \
+          sectionFile:$sectionFile, span:$span, rows:$rows}
+         + (if $col == "" then {} else {col: ($col | tonumber)} end)
+         + (if $row == "" then {} else {row: ($row | tonumber)} end)' \
         >> "$tmp"
     done <<< "$ROWS"
 
@@ -118,6 +123,8 @@ case "$cmd" in
       span="$(jq -r '.span // 2' <<< "$row")"
       rows="$(jq -r '.rows // 1' <<< "$row")"
       section_file="$(jq -r '.sectionFile // "deck/Section.qml"' <<< "$row")"
+      col="$(jq -r '.col // ""' <<< "$row")"
+      row_y="$(jq -r '.row // ""' <<< "$row")"
       [[ -n $id ]] || continue
 
       known="$(jq -r --arg id "$id" '[.sections[] | select(.id == $id)] | length' "$REG")"
@@ -135,14 +142,19 @@ case "$cmd" in
       fi
 
       imported="$(jq -c --arg id "$id" --argjson span "$span" --argjson rows "$rows" \
-        '. + [{id:$id, span:$span, rows:$rows}]' <<< "$imported")"
+        --arg col "$col" --arg row "$row_y" \
+        '. + [{id:$id, span:$span, rows:$rows}
+              + (if $col == "" then {} else {col: ($col | tonumber)} end)
+              + (if $row == "" then {} else {row: ($row | tonumber)} end)]' <<< "$imported")"
       order="$(jq -c --arg id "$id" '. + [$id]' <<< "$order")"
     done
 
     # Every registry section is in the resulting layout: the imported ones are
     # shown, the rest are hidden. Hidden sections keep their place for later.
     ENTRIES_NEW="$(jq -c --argjson imported "$imported" --argjson order "$order" '
-      (($imported | map({key:.id, value:{span:.span, rows:.rows}}) | from_entries)) as $sizes
+      (($imported | map({key:.id,
+          value:({span:.span, rows:.rows}
+            + (if .col != null then {col:.col, row:.row} else {} end))}) | from_entries)) as $sizes
       | (.sections | map(.id)) as $ids
       | reduce $ids[] as $id ({};
           .[$id] = ( ($sizes[$id] // {}) + { shown: (($order | index($id)) != null) } )) ' "$REG")"

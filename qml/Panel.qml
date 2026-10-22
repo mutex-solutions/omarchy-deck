@@ -43,12 +43,11 @@ Panel {
   // Drag state. The ghost lives in the popup, outside the scroll view, so it
   // is not clipped by the grid while the pointer moves.
   property string draggingId: ""
-  property string dropTargetId: ""
-  property bool dropAfter: false
-  property real dropLineX: 0
-  property real dropLineY: 0
-  property real dropLineW: 0
-  property real dropLineH: 2
+  property real dragGrabX: 0
+  property real dragGrabY: 0
+  property bool dropValid: false
+  property int dropCol: 0
+  property int dropRow: 0
   property real dropSlotX: 0
   property real dropSlotY: 0
   property real dropSlotW: 0
@@ -130,6 +129,150 @@ Panel {
   readonly property var gridSections: allSections.filter(function(s) { return s.shown })
   readonly property var hiddenSections: allSections.filter(function(s) { return !s.shown })
 
+  // ---- 2D placement ------------------------------------------------------
+  //
+  // The grid is four columns wide and as tall as it needs to be. A tile has a
+  // column, a row, a width in columns and a height in rows. The linear `order`
+  // is only the seed for tiles that have not been placed yet.
+
+  readonly property real gridGap: Style.space(9)
+  readonly property real gridUnit: Math.max(1, (gridHost.width - 3 * gridGap) / 4)
+
+  function placementFits(list, col, row, span, rows, skipId) {
+    if (col < 0 || row < 0 || col + span > 4) return false
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i]
+      if (skipId !== undefined && String(p.id) === String(skipId)) continue
+      if (col < p.col + p.span && col + span > p.col
+          && row < p.row + p.rows && row + rows > p.row)
+        return false
+    }
+    return true
+  }
+
+  function firstFreePlace(list, span, rows, skipId) {
+    for (var row = 0; row < 100; row++)
+      for (var col = 0; col <= 4 - span; col++)
+        if (placementFits(list, col, row, span, rows, skipId))
+          return { col: col, row: row }
+    return { col: 0, row: 0 }
+  }
+
+  readonly property var placements: {
+    var placed = []
+    var pending = []
+    for (var i = 0; i < allSections.length; i++) {
+      var s = allSections[i]
+      if (!s.shown) continue
+      var o = layout[String(s.id)] || ({})
+      var item = {
+        id: s.id, title: s.title, file: s.file, page: s.page,
+        span: s.span, rows: s.rows, col: 0, row: 0
+      }
+      if (o.col !== undefined && o.row !== undefined
+          && placementFits(placed, Number(o.col), Number(o.row), s.span, s.rows)) {
+        item.col = Number(o.col)
+        item.row = Number(o.row)
+        placed.push(item)
+      } else {
+        pending.push(item)
+      }
+    }
+    for (var j = 0; j < pending.length; j++) {
+      var p = pending[j]
+      var pos = firstFreePlace(placed, p.span, p.rows)
+      p.col = pos.col
+      p.row = pos.row
+      placed.push(p)
+    }
+    return placed
+  }
+
+  readonly property int gridRows: {
+    var rows = 1
+    for (var i = 0; i < placements.length; i++)
+      rows = Math.max(rows, placements[i].row + placements[i].rows)
+    return rows
+  }
+
+  function placementById(id) {
+    for (var i = 0; i < placements.length; i++)
+      if (String(placements[i].id) === String(id)) return placements[i]
+    return null
+  }
+
+  function sectionById(id) {
+    for (var i = 0; i < allSections.length; i++)
+      if (String(allSections[i].id) === String(id)) return allSections[i]
+    return null
+  }
+
+  // Place a section at col/row, moving anything it overlaps to the first free
+  // cells. Returns the complete placement list, or null if impossible.
+  function placeWithDisplacement(id, col, row) {
+    var s = sectionById(id)
+    if (!s) return null
+    var base = []
+    var moved = null
+    for (var i = 0; i < placements.length; i++) {
+      if (String(placements[i].id) === String(id)) moved = placements[i]
+      else base.push(placements[i])
+    }
+    if (!moved) moved = { id: id, title: s.title, file: s.file, page: s.page,
+                          span: s.span, rows: s.rows, col: 0, row: 0 }
+    var next = []
+    var overlapped = []
+    for (var j = 0; j < base.length; j++) {
+      var p = base[j]
+      if (col < p.col + p.span && col + moved.span > p.col
+          && row < p.row + p.rows && row + moved.rows > p.row)
+        overlapped.push(p)
+      else
+        next.push(p)
+    }
+    next.push({ id: moved.id, title: moved.title, file: moved.file, page: moved.page,
+                span: moved.span, rows: moved.rows, col: col, row: row })
+    for (var k = 0; k < overlapped.length; k++) {
+      var o = overlapped[k]
+      var pos = firstFreePlace(next, o.span, o.rows, o.id)
+      if (pos === null) return null
+      next.push({ id: o.id, title: o.title, file: o.file, page: o.page,
+                  span: o.span, rows: o.rows, col: pos.col, row: pos.row })
+    }
+    return next
+  }
+
+  // Freeze a placement list into layout.json: every shown tile gets col/row,
+  // every section not in the list is hidden.
+  function commitPlacements(list) {
+    var next = ({})
+    for (var k in layout) next[k] = layout[k]
+    var shown = ({})
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i]
+      var cur = ({})
+      var existing = layout[String(p.id)]
+      if (existing) for (var f in existing) cur[f] = existing[f]
+      cur.shown = true
+      cur.span = p.span
+      cur.rows = p.rows
+      cur.col = p.col
+      cur.row = p.row
+      next[String(p.id)] = cur
+      shown[String(p.id)] = true
+    }
+    for (var id in next) {
+      if (!shown[id]) {
+        var e = ({})
+        for (var g in next[id]) e[g] = next[id][g]
+        e.shown = false
+        next[id] = e
+      }
+    }
+    layout = next
+    saveLayout()
+  }
+
   function findCatalogEntry(sectionId) {
     for (var i = 0; i < catalog.length; i++) {
       var e = catalog[i]
@@ -210,189 +353,95 @@ Panel {
   }
 
   function applySize(id, span, rows) {
-    updateLayout(id, { shown: true, span: span, rows: rows })
+    var list = placements.slice()
+    var index = -1
+    for (var i = 0; i < list.length; i++)
+      if (String(list[i].id) === String(id)) index = i
+    var old = index >= 0 ? list[index] : null
+    if (index >= 0) list.splice(index, 1)
+
+    var col = 0, row = 0
+    if (old && placementFits(list, old.col, old.row, span, rows)) {
+      col = old.col
+      row = old.row
+    } else {
+      var pos = firstFreePlace(list, span, rows)
+      col = pos.col
+      row = pos.row
+    }
+
+    var s = sectionById(id)
+    list.push({
+      id: String(id),
+      title: old ? old.title : (s ? s.title : String(id)),
+      file: old ? old.file : (s ? s.file : ""),
+      page: old ? old.page : (s ? s.page : ""),
+      span: span, rows: rows, col: col, row: row
+    })
+    commitPlacements(list)
   }
 
-  function moveInOrder(id, targetId, after) {
-    id = String(id)
-    targetId = String(targetId)
-    if (id === "" || targetId === "" || id === targetId) return
-    var ids = order.slice()
-    // A fresh install may have no order yet; seed it from what is on screen.
-    if (ids.length === 0)
-      for (var i = 0; i < allSections.length; i++) ids.push(allSections[i].id)
-    for (var j = 0; j < allSections.length; j++)
-      if (ids.indexOf(allSections[j].id) === -1) ids.push(allSections[j].id)
-
-    ids = ids.filter(function(v) { return v !== id })
-    var at = ids.indexOf(targetId)
-    if (at === -1) at = ids.length
-    else if (after === true) at = at + 1
-    ids.splice(at, 0, id)
-    order = ids
-    saveLayout()
+  function moveTo(id, col, row) {
+    var list = placeWithDisplacement(String(id), Number(col), Number(row))
+    if (list) commitPlacements(list)
   }
 
-  function beginDrag(id, w, h, cx, cy) {
+  function moveToTarget(id, targetId) {
+    var target = placementById(targetId)
+    if (target) moveTo(id, target.col, target.row)
+  }
+
+  function beginDrag(id, w, h, px, py, gx, gy) {
     draggingId = String(id)
-    dropTargetId = ""
-    dropAfter = false
-    dropLineW = 0
-    dropLineH = 0
-    dropSlotW = 0
-    dropSlotH = 0
     dragW = w
     dragH = h
-    dragX = cx
-    dragY = cy
-  }
-
-  function moveDrag(px, py, target) {
     dragX = px
     dragY = py
-    dropTargetId = target
+    dragGrabX = gx
+    dragGrabY = gy
+    dropValid = false
+    dropCol = 0
+    dropRow = 0
+    dropSlotW = 0
+    dropSlotH = 0
   }
 
-  // The tile a drop should land on, and whether it lands after it.
-  //
-  // A full-width block takes a whole row, so the target is that row's leftmost
-  // tile: dropping a 4x1 on the right half of a pair must move both halves, not
-  // squeeze the block between them. For narrower tiles the pointer's side of
-  // the target decides before or after.
-  function dropTargetAt(px, py) {
-    var kids = grid.children
-    var draggedRect = null
-    var draggedSpan = 2
-    var e = catalogEntryById(draggingId)
-    if (e) draggedSpan = Number(e.span)
-
-    for (var i = 0; i < kids.length; i++) {
-      var d = kids[i]
-      if (!d || d.modelData === undefined) continue
-      if (String(d.modelData.id) === String(draggingId)) {
-        draggedRect = d.mapToItem(gridHost, 0, 0)
-        continue
-      }
-    }
-
-    // Releasing over the tile's own slot is not a move.
-    if (draggedRect
-        && px >= draggedRect.x && px <= draggedRect.x + draggedRect.width
-        && py >= draggedRect.y && py <= draggedRect.y + draggedRect.height)
-      return { id: "", after: false, lx: 0, ly: 0, lw: 0, lh: 0,
-               sx: 0, sy: 0, sw: 0, sh: 0 }
-
-    if (px < 0 || py < 0 || px > gridHost.width || py > gridHost.height)
-      return { id: "", after: false, lx: 0, ly: 0, lw: 0, lh: 0,
-               sx: 0, sy: 0, sw: 0, sh: 0 }
-
-    var hit = null
-    var hitPos = null
-    for (var j = 0; j < kids.length; j++) {
-      var c = kids[j]
-      if (!c || c.modelData === undefined) continue
-      if (String(c.modelData.id) === String(draggingId)) continue
-      var p = c.mapToItem(gridHost, 0, 0)
-      if (px >= p.x && px <= p.x + c.width && py >= p.y && py <= p.y + c.height) {
-        hit = c
-        hitPos = p
-        break
-      }
-    }
-
-    // In a gutter, use the nearest tile centre rather than refusing the drop.
-    if (!hit) {
-      var best = 1e9
-      for (var k = 0; k < kids.length; k++) {
-        var t = kids[k]
-        if (!t || t.modelData === undefined) continue
-        if (String(t.modelData.id) === String(draggingId)) continue
-        var tp = t.mapToItem(gridHost, 0, 0)
-        var dx = px - (tp.x + t.width / 2)
-        var dy = py - (tp.y + t.height / 2)
-        var dist = dx * dx + dy * dy
-        if (dist < best) {
-          best = dist
-          hit = t
-          hitPos = tp
-        }
-      }
-    }
-    if (!hit) return { id: "", after: false, lx: 0, ly: 0, lw: 0, lh: 0,
-                       sx: 0, sy: 0, sw: 0, sh: 0 }
-
-    if (draggedSpan >= 4) {
-      // Leftmost tile whose vertical band overlaps the target row.
-      var rowStart = hit
-      var rowPos = hitPos
-      for (var m = 0; m < kids.length; m++) {
-        var r = kids[m]
-        if (!r || r.modelData === undefined) continue
-        if (String(r.modelData.id) === String(draggingId)) continue
-        var rp = r.mapToItem(gridHost, 0, 0)
-        var overlap = Math.min(rp.y + r.height, hitPos.y + hit.height)
-          - Math.max(rp.y, hitPos.y)
-        if (overlap > Math.min(r.height, hit.height) / 2 && rp.x < rowPos.x) {
-          rowStart = r
-          rowPos = rp
-        }
-      }
-      return {
-        id: String(rowStart.modelData.id),
-        after: false,
-        // A full-width block lands on a row: draw the whole row's line.
-        lx: 0,
-        ly: Math.max(0, rowPos.y),
-        lw: gridHost.width,
-        lh: Style.space(3),
-        sx: 0,
-        sy: rowPos.y,
-        sw: gridHost.width,
-        sh: Math.max(root.dragH, grid.unit)
-      }
-    }
-
-    var after = px > hitPos.x + hit.width / 2
-    var slotX = Math.max(0, Math.min(gridHost.width - root.dragW,
-      after ? hitPos.x + hit.width + grid.columnSpacing : hitPos.x))
-    return {
-      id: String(hit.modelData.id),
-      after: after,
-      // The insertion line sits on the landing slot's leading edge, so it
-      // stays aligned with the slot at every tile width.
-      lx: slotX - Style.space(1),
-      ly: hitPos.y,
-      lw: Style.space(3),
-      lh: root.dragH,
-      sx: slotX,
-      sy: hitPos.y,
-      sw: root.dragW,
-      sh: root.dragH
-    }
-  }
-
+  // The pointer is mapped into grid cells. The slot snaps to the cell the
+  // tile would occupy; overlapped tiles are moved aside on commit, so a small
+  // tile can take a cell inside a larger one's area.
   function moveDragAt(px, py) {
-    var t = dropTargetAt(px, py)
-    dropAfter = t.after
-    dropLineX = t.lx
-    dropLineY = t.ly
-    dropLineW = t.lw
-    dropLineH = t.lh
-    dropSlotX = t.sx
-    dropSlotY = t.sy
-    dropSlotW = t.sw
-    dropSlotH = t.sh
-    moveDrag(px, py, t.id)
+    var p = placementById(draggingId)
+    if (!p) return
+    dragX = px
+    dragY = py
+    var step = gridUnit + gridGap
+    var localX = px - dragGrabX
+    var localY = py - dragGrabY
+    var col = Math.round(localX / step)
+    var row = Math.max(0, Math.round(localY / step))
+    col = Math.max(0, Math.min(4 - p.span, col))
+    dropCol = col
+    dropRow = row
+
+    var list = placeWithDisplacement(draggingId, col, row)
+    dropValid = list !== null
+    dropSlotX = col * step
+    dropSlotY = row * step
+    dropSlotW = p.span * gridUnit + Math.max(0, p.span - 1) * gridGap
+    dropSlotH = p.rows * gridUnit + Math.max(0, p.rows - 1) * gridGap
   }
 
   function endDrag() {
-    if (draggingId !== "" && dropTargetId !== "" && dropTargetId !== draggingId)
-      moveInOrder(draggingId, dropTargetId, dropAfter)
+    if (draggingId !== "" && dropValid) {
+      var list = placeWithDisplacement(draggingId, dropCol, dropRow)
+      if (list) commitPlacements(list)
+    }
     draggingId = ""
-    dropTargetId = ""
-    dropAfter = false
-    dropLineW = 0
-    dropLineH = 0
+    dragW = 0
+    dragH = 0
+    dragGrabX = 0
+    dragGrabY = 0
+    dropValid = false
     dropSlotW = 0
     dropSlotH = 0
   }
@@ -483,7 +532,35 @@ Panel {
   }
 
   function setShown(id, shown) {
-    updateLayout(id, { shown: shown === true })
+    id = String(id)
+    if (shown) {
+      if (placementById(id)) {
+        commitPlacements(placements)
+        return
+      }
+      var s = sectionById(id)
+      if (!s) return
+      var list = placements.slice()
+      var col = 0, row = 0
+      var o = layout[id] || ({})
+      if (o.col !== undefined && o.row !== undefined
+          && placementFits(list, Number(o.col), Number(o.row), s.span, s.rows)) {
+        col = Number(o.col)
+        row = Number(o.row)
+      } else {
+        var pos = firstFreePlace(list, s.span, s.rows)
+        col = pos.col
+        row = pos.row
+      }
+      list.push({ id: id, title: s.title, file: s.file, page: s.page,
+                  span: s.span, rows: s.rows, col: col, row: row })
+      commitPlacements(list)
+    } else {
+      var next = []
+      for (var i = 0; i < placements.length; i++)
+        if (String(placements[i].id) !== id) next.push(placements[i])
+      commitPlacements(next)
+    }
   }
 
   // id -> loaded section item, so an IPC call or keybind can drive a section
@@ -632,7 +709,10 @@ Panel {
       root.chooserId = ""
     }
     function move(id: string, target: string) {
-      root.moveInOrder(String(id), String(target), false)
+      root.moveToTarget(String(id), String(target))
+    }
+    function place(id: string, col: int, row: int) {
+      root.moveTo(String(id), col, row)
     }
   }
 
@@ -1001,29 +1081,6 @@ Panel {
       onActivateRequested: root.close()
     }
 
-    // Hidden sections: instantiated so their `state` is registered and their
-    // page can be opened through openSection, but never drawn as a tile.
-    Item {
-      visible: false
-      width: 0
-      height: 0
-
-      Repeater {
-        model: root.hiddenSections
-
-        delegate: Loader {
-          id: hiddenLoader
-          required property var modelData
-          source: root.resolvePath(String(modelData.file))
-          onLoaded: root.registerSection(modelData.id, item)
-          onStatusChanged: {
-            if (status === Loader.Error)
-              console.warn("deck: failed to load section", modelData.id, hiddenLoader.errorString)
-          }
-        }
-      }
-    }
-
     // The grid fits without scrolling, but arrange mode adds the size
     // controls and the full list of sections that are not on the grid. Cap the
     // popup and scroll rather than clipping the last control off the screen.
@@ -1139,62 +1196,55 @@ Panel {
       }
 
       // ---------------- grid ----------------
-      // The host exists so the drag ghost and the grid share a coordinate
-      // space: both are in the scrolled content, not in the popup window.
+      // Absolute placement in a four-column cell grid. The host exists so the
+      // drag ghost and the tiles share a coordinate space inside the scroll.
       Item {
         id: gridHost
         width: parent.width
-        height: grid.implicitHeight
+        height: root.gridRows * root.gridUnit + Math.max(0, root.gridRows - 1) * root.gridGap
         visible: !root.pageOpen && root.view === "grid"
 
-      // GridLayout, not Flow: a section may span rows as well as columns (a
-      // tile may be 2x2), and Flow cannot place a neighbour beside a two-row
-      // tile. Four units across, as in the design mock.
-      GridLayout {
-        id: grid
-        width: parent.width
-        visible: !root.pageOpen && root.view === "grid"
-        columns: 4
-        columnSpacing: Style.space(9)
-        rowSpacing: Style.space(9)
-        readonly property real unit: (width - 3 * columnSpacing) / 4
-
+        // The model is the registry, not the placements: a drag changes
+        // positions, not the set of sections, so delegates (and their live
+        // state) persist while the tiles move. Hidden sections still
+        // instantiate here so their pages stay reachable.
         Repeater {
-          model: root.gridSections
+          model: root.registrySections
 
           delegate: Tile {
             required property var modelData
+            readonly property var placement: root.placementById(modelData.id)
 
-            // units are in grid columns: 1 narrow, 2 half (default), 4 full.
-            readonly property int unitSpan: {
-              var n = Number(modelData.span)
-              return (n === 1 || n === 2 || n === 4) ? n : 2
-            }
-            // rows is 1 by default; 2 makes a 2x2 tile.
-            readonly property int unitRows: Number(modelData.rows) === 2 ? 2 : 1
+            visible: !!placement
+            x: placement ? placement.col * (root.gridUnit + root.gridGap) : 0
+            y: placement ? placement.row * (root.gridUnit + root.gridGap) : 0
+            width: placement
+              ? placement.span * root.gridUnit + Math.max(0, placement.span - 1) * root.gridGap
+              : 0
+            height: placement
+              ? placement.rows * root.gridUnit + Math.max(0, placement.rows - 1) * root.gridGap
+              : 0
 
-            compact: unitSpan === 1 && unitRows === 1
-            span: unitSpan
-            rowspan: unitRows
+            compact: !!placement && placement.span === 1 && placement.rows === 1
+            span: placement ? placement.span : 2
+            rowspan: placement ? placement.rows : 1
             editing: root.editing
-            draggable: root.editing
-            removable: root.editing
+            draggable: root.editing && !!placement
+            removable: root.editing && !!placement
+
             onRemoveRequested: root.setShown(modelData.id, false)
-            onDragStarted: function(x, y) {
-              var p = mapToItem(gridHost, x, y)
-              root.beginDrag(modelData.id, width, height, p.x, p.y)
+            onDragStarted: function(px, py) {
+              if (!placement) return
+              var origin = mapToItem(gridHost, 0, 0)
+              var p = mapToItem(gridHost, px, py)
+              root.beginDrag(modelData.id, width, height, p.x, p.y,
+                p.x - origin.x, p.y - origin.y)
             }
-            onDragMoved: function(x, y) {
-              var p = mapToItem(gridHost, x, y)
+            onDragMoved: function(px, py) {
+              var p = mapToItem(gridHost, px, py)
               root.moveDragAt(p.x, p.y)
             }
             onDragFinished: root.endDrag()
-            Layout.columnSpan: unitSpan
-            Layout.rowSpan: unitRows
-            Layout.preferredWidth: Math.floor(unitSpan * grid.unit + (unitSpan - 1) * grid.columnSpacing)
-            Layout.preferredHeight: Math.floor(unitRows * grid.unit + (unitRows - 1) * grid.rowSpacing)
-            Layout.fillWidth: false
-            Layout.fillHeight: false
 
             Loader {
               id: sectionLoader
@@ -1208,24 +1258,19 @@ Panel {
 
             section: sectionLoader.item
 
-            // A section with no toggle() has nothing to switch, so the tap
-            // does what the hold would: it opens the page. Otherwise a tap on
-            // a read-only tile would be a dead press.
             onToggled: {
               if (sectionLoader.item && typeof sectionLoader.item.toggle === "function")
                 sectionLoader.item.toggle()
-              else
-                root.openPage(modelData)
+              else if (placement)
+                root.openPage(placement)
             }
 
-            onHeldLong: root.openPage(modelData)
+            onHeldLong: if (placement) root.openPage(placement)
           }
         }
 
-      }
-
         // The floating copy. The original stays in place at 25% so the grid
-        // does not reflow until the drop decides where it lands.
+        // does not shift until the drop commits.
         Item {
           id: dragGhost
           visible: root.draggingId !== ""
@@ -1233,12 +1278,9 @@ Panel {
           z: 100
           width: root.dragW
           height: root.dragH
-          x: root.dragX - width / 2
-          y: root.dragY - height / 2
+          x: root.dragX - root.dragGrabX
+          y: root.dragY - root.dragGrabY
 
-          // The tile surface is deliberately translucent; over another tile
-          // its text would mix with the tile below. The ghost gets an opaque
-          // backdrop of its own.
           Rectangle {
             anchors.fill: parent
             radius: Style.cornerRadius
@@ -1253,44 +1295,36 @@ Panel {
             draggable: false
             removable: false
             compact: {
-              var e = root.catalogEntryById(root.draggingId)
-              return !!e && e.span === 1 && e.rows === 1
+              var p = root.placementById(root.draggingId)
+              return !!p && p.span === 1 && p.rows === 1
             }
             span: {
-              var e = root.catalogEntryById(root.draggingId)
-              return e ? e.span : 2
+              var p = root.placementById(root.draggingId)
+              return p ? p.span : 2
             }
             rowspan: {
-              var e = root.catalogEntryById(root.draggingId)
-              return e ? e.rows : 1
+              var p = root.placementById(root.draggingId)
+              return p ? p.rows : 1
             }
           }
         }
 
-        // A slot the size of the dragged tile at the place it would land.
-        // The line marks the exact insertion edge on top of it.
+        // The cell the tile will occupy. Red only if the target cannot be
+        // made to fit at all, which is rare because overlapped tiles flow out.
         Rectangle {
-          visible: root.draggingId !== "" && root.dropTargetId !== ""
-            && root.dropSlotW > 0
+          visible: root.draggingId !== "" && root.dragW > 0
           x: root.dropSlotX
           y: root.dropSlotY
           width: root.dropSlotW
           height: root.dropSlotH
           radius: Style.cornerRadius
-          color: Util.alpha(Color.accent, 0.10)
+          color: root.dropValid
+            ? Util.alpha(Color.accent, 0.10)
+            : Util.alpha(Color.urgent, 0.10)
           border.width: 2
-          border.color: Util.alpha(Color.accent, 0.65)
-          z: 90
-        }
-
-        Rectangle {
-          visible: root.draggingId !== "" && root.dropTargetId !== ""
-          x: root.dropLineX
-          y: root.dropLineY
-          width: root.dropLineW
-          height: root.dropLineH
-          radius: Style.space(1)
-          color: Color.accent
+          border.color: root.dropValid
+            ? Util.alpha(Color.accent, 0.7)
+            : Util.alpha(Color.urgent, 0.8)
           z: 110
         }
       }

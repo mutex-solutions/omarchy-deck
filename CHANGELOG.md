@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.0
+
+- **The grid is a free four-column canvas.** A tile now has a column and a row
+  instead of a place in a linear packing. Drag it to any cell; the slot snaps
+  to the cells and the drop commits. This is what makes a left-hand 2x2 block
+  out of four individual 1x1 tiles possible.
+- **Dropping a tile over another displaces it.** The overlapped tile moves to
+  the first free cells, so a small tile can take a cell inside a larger tile's
+  area instead of being refused.
+- Positions are stored as `col`/`row` in `layout.json` and carried in shared
+  decks. `order` is only the seed for tiles that have never been placed.
+- The grid model is the registry, not the placement list, so moving tiles no
+  longer recreates every section and resets its live state.
+- Sizes keep their cell when they still fit and find the first free cells when
+  they do not.
+
 ## 0.7.3
 
 - Shared decks carry **`sectionFile`**. A plugin can host more than one
