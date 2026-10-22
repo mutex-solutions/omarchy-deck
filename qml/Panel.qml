@@ -44,6 +44,15 @@ Panel {
   // is not clipped by the grid while the pointer moves.
   property string draggingId: ""
   property string dropTargetId: ""
+  property bool dropAfter: false
+  property real dropLineX: 0
+  property real dropLineY: 0
+  property real dropLineW: 0
+  property real dropLineH: 2
+  property real dropSlotX: 0
+  property real dropSlotY: 0
+  property real dropSlotW: 0
+  property real dropSlotH: 0
   property real dragX: 0
   property real dragY: 0
   property real dragW: 0
@@ -204,7 +213,7 @@ Panel {
     updateLayout(id, { shown: true, span: span, rows: rows })
   }
 
-  function moveInOrder(id, targetId) {
+  function moveInOrder(id, targetId, after) {
     id = String(id)
     targetId = String(targetId)
     if (id === "" || targetId === "" || id === targetId) return
@@ -218,6 +227,7 @@ Panel {
     ids = ids.filter(function(v) { return v !== id })
     var at = ids.indexOf(targetId)
     if (at === -1) at = ids.length
+    else if (after === true) at = at + 1
     ids.splice(at, 0, id)
     order = ids
     saveLayout()
@@ -226,6 +236,11 @@ Panel {
   function beginDrag(id, w, h, cx, cy) {
     draggingId = String(id)
     dropTargetId = ""
+    dropAfter = false
+    dropLineW = 0
+    dropLineH = 0
+    dropSlotW = 0
+    dropSlotH = 0
     dragW = w
     dragH = h
     dragX = cx
@@ -238,27 +253,148 @@ Panel {
     dropTargetId = target
   }
 
-  function moveDragAt(px, py) {
-    var target = ""
+  // The tile a drop should land on, and whether it lands after it.
+  //
+  // A full-width block takes a whole row, so the target is that row's leftmost
+  // tile: dropping a 4x1 on the right half of a pair must move both halves, not
+  // squeeze the block between them. For narrower tiles the pointer's side of
+  // the target decides before or after.
+  function dropTargetAt(px, py) {
     var kids = grid.children
+    var draggedRect = null
+    var draggedSpan = 2
+    var e = catalogEntryById(draggingId)
+    if (e) draggedSpan = Number(e.span)
+
     for (var i = 0; i < kids.length; i++) {
-      var c = kids[i]
+      var d = kids[i]
+      if (!d || d.modelData === undefined) continue
+      if (String(d.modelData.id) === String(draggingId)) {
+        draggedRect = d.mapToItem(gridHost, 0, 0)
+        continue
+      }
+    }
+
+    // Releasing over the tile's own slot is not a move.
+    if (draggedRect
+        && px >= draggedRect.x && px <= draggedRect.x + draggedRect.width
+        && py >= draggedRect.y && py <= draggedRect.y + draggedRect.height)
+      return { id: "", after: false, lx: 0, ly: 0, lw: 0, lh: 0,
+               sx: 0, sy: 0, sw: 0, sh: 0 }
+
+    if (px < 0 || py < 0 || px > gridHost.width || py > gridHost.height)
+      return { id: "", after: false, lx: 0, ly: 0, lw: 0, lh: 0,
+               sx: 0, sy: 0, sw: 0, sh: 0 }
+
+    var hit = null
+    var hitPos = null
+    for (var j = 0; j < kids.length; j++) {
+      var c = kids[j]
       if (!c || c.modelData === undefined) continue
       if (String(c.modelData.id) === String(draggingId)) continue
       var p = c.mapToItem(gridHost, 0, 0)
       if (px >= p.x && px <= p.x + c.width && py >= p.y && py <= p.y + c.height) {
-        target = String(c.modelData.id)
+        hit = c
+        hitPos = p
         break
       }
     }
-    moveDrag(px, py, target)
+
+    // In a gutter, use the nearest tile centre rather than refusing the drop.
+    if (!hit) {
+      var best = 1e9
+      for (var k = 0; k < kids.length; k++) {
+        var t = kids[k]
+        if (!t || t.modelData === undefined) continue
+        if (String(t.modelData.id) === String(draggingId)) continue
+        var tp = t.mapToItem(gridHost, 0, 0)
+        var dx = px - (tp.x + t.width / 2)
+        var dy = py - (tp.y + t.height / 2)
+        var dist = dx * dx + dy * dy
+        if (dist < best) {
+          best = dist
+          hit = t
+          hitPos = tp
+        }
+      }
+    }
+    if (!hit) return { id: "", after: false, lx: 0, ly: 0, lw: 0, lh: 0,
+                       sx: 0, sy: 0, sw: 0, sh: 0 }
+
+    if (draggedSpan >= 4) {
+      // Leftmost tile whose vertical band overlaps the target row.
+      var rowStart = hit
+      var rowPos = hitPos
+      for (var m = 0; m < kids.length; m++) {
+        var r = kids[m]
+        if (!r || r.modelData === undefined) continue
+        if (String(r.modelData.id) === String(draggingId)) continue
+        var rp = r.mapToItem(gridHost, 0, 0)
+        var overlap = Math.min(rp.y + r.height, hitPos.y + hit.height)
+          - Math.max(rp.y, hitPos.y)
+        if (overlap > Math.min(r.height, hit.height) / 2 && rp.x < rowPos.x) {
+          rowStart = r
+          rowPos = rp
+        }
+      }
+      return {
+        id: String(rowStart.modelData.id),
+        after: false,
+        // A full-width block lands on a row: draw the whole row's line.
+        lx: 0,
+        ly: Math.max(0, rowPos.y - grid.rowSpacing / 2),
+        lw: gridHost.width,
+        lh: Style.space(2),
+        sx: 0,
+        sy: rowPos.y,
+        sw: gridHost.width,
+        sh: Math.max(root.dragH, grid.unit)
+      }
+    }
+
+    var after = px > hitPos.x + hit.width / 2
+    return {
+      id: String(hit.modelData.id),
+      after: after,
+      // A narrower tile lands between two tiles: a vertical insertion line.
+      lx: after
+        ? hitPos.x + hit.width + grid.columnSpacing / 2 - Style.space(1)
+        : hitPos.x - grid.columnSpacing / 2 - Style.space(1),
+      ly: hitPos.y,
+      lw: Style.space(2),
+      lh: hit.height,
+      sx: Math.max(0, Math.min(gridHost.width - root.dragW,
+        after ? hitPos.x + hit.width + grid.columnSpacing : hitPos.x)),
+      sy: hitPos.y,
+      sw: root.dragW,
+      sh: root.dragH
+    }
+  }
+
+  function moveDragAt(px, py) {
+    var t = dropTargetAt(px, py)
+    dropAfter = t.after
+    dropLineX = t.lx
+    dropLineY = t.ly
+    dropLineW = t.lw
+    dropLineH = t.lh
+    dropSlotX = t.sx
+    dropSlotY = t.sy
+    dropSlotW = t.sw
+    dropSlotH = t.sh
+    moveDrag(px, py, t.id)
   }
 
   function endDrag() {
     if (draggingId !== "" && dropTargetId !== "" && dropTargetId !== draggingId)
-      moveInOrder(draggingId, dropTargetId)
+      moveInOrder(draggingId, dropTargetId, dropAfter)
     draggingId = ""
     dropTargetId = ""
+    dropAfter = false
+    dropLineW = 0
+    dropLineH = 0
+    dropSlotW = 0
+    dropSlotH = 0
   }
 
   function reloadRegistry() {
@@ -496,7 +632,7 @@ Panel {
       root.chooserId = ""
     }
     function move(id: string, target: string) {
-      root.moveInOrder(String(id), String(target))
+      root.moveInOrder(String(id), String(target), false)
     }
   }
 
@@ -1042,8 +1178,6 @@ Panel {
             editing: root.editing
             draggable: root.editing
             removable: root.editing
-            dropTarget: root.editing && root.dropTargetId === modelData.id
-              && root.draggingId !== ""
             onRemoveRequested: root.setShown(modelData.id, false)
             onDragStarted: function(x, y) {
               var p = mapToItem(gridHost, x, y)
@@ -1105,10 +1239,12 @@ Panel {
 
           Column {
             anchors.centerIn: parent
+            width: parent.width - Style.space(12)
             spacing: Style.space(2)
 
             Text {
-              anchors.horizontalCenter: parent.horizontalCenter
+              width: parent.width
+              horizontalAlignment: Text.AlignHCenter
               text: "+"
               color: Util.alpha(Color.foreground, 0.65)
               font.family: Style.font.family
@@ -1116,7 +1252,8 @@ Panel {
             }
 
             Text {
-              anchors.horizontalCenter: parent.horizontalCenter
+              width: parent.width
+              horizontalAlignment: Text.AlignHCenter
               text: "Add a control"
               color: Util.alpha(Color.foreground, 0.5)
               font.family: Style.font.family
@@ -1149,6 +1286,17 @@ Panel {
           x: root.dragX - width / 2
           y: root.dragY - height / 2
 
+          // The tile surface is deliberately translucent; over another tile
+          // its text would mix with the tile below. The ghost gets an opaque
+          // backdrop of its own.
+          Rectangle {
+            anchors.fill: parent
+            radius: Style.cornerRadius
+            color: Util.alpha(Color.background, 0.96)
+            border.width: 1
+            border.color: Util.alpha(Color.accent, 0.55)
+          }
+
           Tile {
             anchors.fill: parent
             section: root.sectionMap[root.draggingId]
@@ -1167,6 +1315,33 @@ Panel {
               return e ? e.rows : 1
             }
           }
+        }
+
+        // A slot the size of the dragged tile at the place it would land.
+        // The line marks the exact insertion edge on top of it.
+        Rectangle {
+          visible: root.draggingId !== "" && root.dropTargetId !== ""
+            && root.dropSlotW > 0
+          x: root.dropSlotX
+          y: root.dropSlotY
+          width: root.dropSlotW
+          height: root.dropSlotH
+          radius: Style.cornerRadius
+          color: Util.alpha(Color.accent, 0.10)
+          border.width: 2
+          border.color: Util.alpha(Color.accent, 0.65)
+          z: 90
+        }
+
+        Rectangle {
+          visible: root.draggingId !== "" && root.dropTargetId !== ""
+          x: root.dropLineX
+          y: root.dropLineY
+          width: root.dropLineW
+          height: root.dropLineH
+          radius: Style.space(1)
+          color: Color.accent
+          z: 110
         }
       }
 

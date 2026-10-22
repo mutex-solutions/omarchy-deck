@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.0
+
+- **A section can own its surface.** `tileBleed: true` on a section hides the
+  host tile behind its custom body. The connectivity block uses it, so the
+  four radios sit on the panel background instead of on a tinted tile. That
+  tint was the haze around the block.
+- **Drag targets the layout, not one tile.** A full-width block targets the
+  row's leftmost tile, so dropping it on either half of a pair moves both
+  halves below it. A narrower tile targets before or after the tile under the
+  pointer. Gutters resolve to the nearest tile instead of refusing the drop.
+- A slot the size of the dragged tile previews the landing place, with an
+  accent insertion line at its edge. The floating copy has an opaque backdrop
+  so its text does not mix with the tile below. A grip marks draggable tiles
+  and the cursor closes while dragging.
+- The Add a control tile lays out its label without anchors inside a Column,
+  which previously left it blank.
+- Connectivity radios carry captions (Wi-Fi, Bluetooth, Tailscale, Airplane),
+  so the block is readable without hovering.
+
 ## 0.6.2
 
 - The Deck mark draws at the optical size of a bar glyph instead of filling

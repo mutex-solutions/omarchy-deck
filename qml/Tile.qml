@@ -57,6 +57,11 @@ Item {
   // gesture sits on top so the tile can still be dragged and held.
   readonly property bool custom: !!sizedComponent
 
+  // A body that is itself the whole surface (the connectivity cluster: four
+  // radios with their own borders) opts out of the host surface, so the gaps
+  // are the panel, not a tinted tile.
+  readonly property bool bleed: !!(section && section.tileBleed === true)
+
   property bool hovered: false
   property bool didLongPress: false
 
@@ -66,6 +71,7 @@ Item {
   // custom body used to replace the chrome entirely, which left the 4x1
   // Sessions/Audio/Display tiles without a border.
   Rectangle {
+    visible: !tile.bleed
     anchors.fill: parent
     radius: Style.cornerRadius
     color: tile.active
@@ -211,6 +217,20 @@ Item {
     showProgress.stop()
     progressAnim.stop()
     progress.width = 0
+  }
+
+  // Drag affordance. Dragging still works anywhere on the tile; the grip is
+  // the hint that it is movable, separated from the x on the other corner.
+  Text {
+    visible: tile.draggable && tile.editing
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.margins: Style.space(3)
+    text: "⠿"
+    color: Util.alpha(Color.foreground, 0.4)
+    font.family: Style.font.family
+    font.pixelSize: Style.font.caption
+    z: 9
   }
 
   // The tile under the pointer while something is being dragged.
