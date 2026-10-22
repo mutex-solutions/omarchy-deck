@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.1
+
+- **Edit mode is position-only.** A press in edit mode never starts the hold
+  gesture and a release never toggles or opens a page. The host gesture covers
+  custom bodies again, so their controls are not clickable while arranging;
+  the grip is the visual hint, not the only drag area. Dragging still works
+  anywhere on the tile.
+- This corrects 0.9.0's "custom tiles stay interactive while editing", which
+  made a hold-to-drag release open the section page. Outside edit mode custom
+  bodies are fully interactive and their 450ms hold opens the page.
+
 ## 0.9.0
 
 - **Editing is staged.** Entering Edit snapshots the layout. Adding, removing,
