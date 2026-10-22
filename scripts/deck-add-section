@@ -24,6 +24,7 @@ URL=""
 WANT_ID=""
 WANT_TITLE=""
 WANT_SECTION_ID=""
+WANT_SECTION_FILE=""
 
 usage() {
   sed -n '3,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -33,6 +34,7 @@ while (($# > 0)); do
   case "$1" in
     --id)         WANT_ID="${2:?--id needs a value}"; shift 2 ;;
     --section-id) WANT_SECTION_ID="${2:?--section-id needs a value}"; shift 2 ;;
+    --section-file) WANT_SECTION_FILE="${2:?--section-file needs a value}"; shift 2 ;;
     --title)      WANT_TITLE="${2:?--title needs a value}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     --*) echo "deck-add-section: unknown option $1" >&2; exit 2 ;;
@@ -115,12 +117,26 @@ ID="$(jq -r '.id // empty' "$DIR/manifest.json" 2>/dev/null || true)"
 TITLE="${WANT_TITLE:-$(jq -r '.name // empty' "$DIR/manifest.json" 2>/dev/null || true)}"
 [[ -n $TITLE ]] || TITLE="$ID"
 
-SECTION="$DIR/deck/Section.qml"
-PAGE="$DIR/deck/Page.qml"
-[[ -f $SECTION ]] || json_fail "this plugin has no Deck section (deck/Section.qml)"
+REL_SECTION="${WANT_SECTION_FILE:-deck/Section.qml}"
+case "$REL_SECTION" in
+  deck/*.qml) ;;
+  *) json_fail "--section-file must be a deck/*.qml path" ;;
+esac
+SECTION="$DIR/$REL_SECTION"
+[[ -f $SECTION ]] || json_fail "this plugin has no $REL_SECTION"
+
+# A second section in the same plugin gets a page beside it, not the plugin's
+# generic deck/Page.qml (which belongs to deck/Section.qml).
+if [[ -n $WANT_SECTION_FILE ]]; then
+  PAGE="${SECTION%.qml}Page.qml"
+  [[ -f $PAGE ]] || PAGE=""
+else
+  PAGE="$DIR/deck/Page.qml"
+  [[ -f $PAGE ]] || PAGE=""
+fi
 
 PAGE_ARG=""
-[[ -f $PAGE ]] && PAGE_ARG="$PAGE"
+[[ -n $PAGE ]] && PAGE_ARG="$PAGE"
 
 # Build from the user registry when it exists, otherwise from the bundle's, so
 # adding the first custom section does not drop everything already installed.

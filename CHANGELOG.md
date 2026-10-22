@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.3
+
+- Shared decks carry **`sectionFile`**. A plugin can host more than one
+  section (connectivity has the block and an individual Airplane section);
+  import now registers the file the deck actually used instead of assuming
+  `deck/Section.qml`. `deck-add-section --section-file` is the CLI equivalent,
+  and a second section looks for a page beside its file, not the plugin's
+  generic page.
+
 ## 0.7.2
 
 - `tileBleed` applies to a 2x2 body only. The connectivity block keeps its

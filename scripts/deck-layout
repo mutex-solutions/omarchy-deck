@@ -74,9 +74,11 @@ case "$cmd" in
         repo="$(git -C "$dir" remote get-url origin 2>/dev/null || true)"
         repo="${repo%.git}"
       fi
+      rel="${file#"$dir"/}"
       jq -nc --arg id "$id" --arg title "$title" --arg pluginId "$plugin_id" \
-        --arg repo "$repo" --argjson span "$span" --argjson rows "$rows" \
-        '{id:$id, title:$title, pluginId:$pluginId, repo:$repo, span:$span, rows:$rows}' \
+        --arg repo "$repo" --arg sectionFile "$rel" --argjson span "$span" --argjson rows "$rows" \
+        '{id:$id, title:$title, pluginId:$pluginId, repo:$repo,
+          sectionFile:$sectionFile, span:$span, rows:$rows}' \
         >> "$tmp"
     done <<< "$ROWS"
 
@@ -115,13 +117,15 @@ case "$cmd" in
       repo="$(jq -r '.repo // empty' <<< "$row")"
       span="$(jq -r '.span // 2' <<< "$row")"
       rows="$(jq -r '.rows // 1' <<< "$row")"
+      section_file="$(jq -r '.sectionFile // "deck/Section.qml"' <<< "$row")"
       [[ -n $id ]] || continue
 
       known="$(jq -r --arg id "$id" '[.sections[] | select(.id == $id)] | length' "$REG")"
       if [[ $known == 0 ]]; then
         [[ -n $repo ]] || { missing="$(jq -c --arg id "$id" '. + [$id]' <<< "$missing")"; continue; }
         [[ -x $ADD ]] || fail "deck-add-section is missing"
-        if ! RES="$("$ADD" --id "$plugin_id" --section-id "$id" --title "$title" "$repo" 2>/dev/null)" \
+        if ! RES="$("$ADD" --id "$plugin_id" --section-id "$id" --title "$title" \
+             --section-file "$section_file" "$repo" 2>/dev/null)" \
            || [[ "$(jq -r '.ok // false' <<< "$RES" 2>/dev/null)" != true ]]; then
           missing="$(jq -c --arg id "$id" '. + [$id]' <<< "$missing")"
           continue
