@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.2
+
+- `tileBleed` applies to a 2x2 body only. The connectivity block keeps its
+  edge-to-edge square, while its half and full bodies get the standard tile
+  surface and border.
+
 ## 0.7.1
 
 - **One add action.** The full-width Add a control tile competed with the

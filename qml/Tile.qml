@@ -61,6 +61,7 @@ Item {
   // radios with their own borders) opts out of the host surface, so the gaps
   // are the panel, not a tinted tile.
   readonly property bool bleed: !!(section && section.tileBleed === true)
+    && tile.span === 2 && tile.rowspan === 2
 
   property bool hovered: false
   property bool didLongPress: false
