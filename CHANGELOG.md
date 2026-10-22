@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.1
+
+- **One add action.** The full-width Add a control tile competed with the
+  header +; the header is now a clear "+ Add" button and the duplicate tile is
+  gone.
+- Larger remove targets (18px, 16px on compact), a more visible drag grip, and
+  the insertion line is aligned to the landing slot at every tile width. The
+  floating copy's backdrop is slightly translucent so the grid stays visible
+  around it.
+
 ## 0.7.0
 
 - **A section can own its surface.** `tileBleed: true` on a section hides the

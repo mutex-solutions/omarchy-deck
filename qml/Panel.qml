@@ -342,9 +342,9 @@ Panel {
         after: false,
         // A full-width block lands on a row: draw the whole row's line.
         lx: 0,
-        ly: Math.max(0, rowPos.y - grid.rowSpacing / 2),
+        ly: Math.max(0, rowPos.y),
         lw: gridHost.width,
-        lh: Style.space(2),
+        lh: Style.space(3),
         sx: 0,
         sy: rowPos.y,
         sw: gridHost.width,
@@ -353,18 +353,18 @@ Panel {
     }
 
     var after = px > hitPos.x + hit.width / 2
+    var slotX = Math.max(0, Math.min(gridHost.width - root.dragW,
+      after ? hitPos.x + hit.width + grid.columnSpacing : hitPos.x))
     return {
       id: String(hit.modelData.id),
       after: after,
-      // A narrower tile lands between two tiles: a vertical insertion line.
-      lx: after
-        ? hitPos.x + hit.width + grid.columnSpacing / 2 - Style.space(1)
-        : hitPos.x - grid.columnSpacing / 2 - Style.space(1),
+      // The insertion line sits on the landing slot's leading edge, so it
+      // stays aligned with the slot at every tile width.
+      lx: slotX - Style.space(1),
       ly: hitPos.y,
-      lw: Style.space(2),
-      lh: hit.height,
-      sx: Math.max(0, Math.min(gridHost.width - root.dragW,
-        after ? hitPos.x + hit.width + grid.columnSpacing : hitPos.x)),
+      lw: Style.space(3),
+      lh: root.dragH,
+      sx: slotX,
       sy: hitPos.y,
       sw: root.dragW,
       sh: root.dragH
@@ -1063,8 +1063,8 @@ Panel {
           anchors.right: editChip.left
           anchors.rightMargin: Style.space(6)
           anchors.verticalCenter: parent.verticalCenter
-          width: Style.space(22)
-          height: Style.space(22)
+          width: addText.implicitWidth + Style.space(16)
+          height: Style.space(20)
           radius: Style.cornerRadius
           color: addMouse.containsMouse
             ? Util.alpha(Color.accent, Style.hoverFillAlpha)
@@ -1073,11 +1073,12 @@ Panel {
           border.color: Util.alpha(Color.accent, 0.45)
 
           Text {
+            id: addText
             anchors.centerIn: parent
-            text: "+"
+            text: "+ Add"
             color: Color.accent
             font.family: Style.font.family
-            font.pixelSize: Style.font.title
+            font.pixelSize: Style.font.caption
           }
 
           MouseArea {
@@ -1221,57 +1222,6 @@ Panel {
           }
         }
 
-        // An explicit add tile at the end of the grid while editing. The
-        // header + still works; this one is visible in the place where a new
-        // control would land.
-        Rectangle {
-          visible: root.editing
-          Layout.columnSpan: 4
-          Layout.rowSpan: 1
-          Layout.preferredWidth: Math.floor(4 * grid.unit + 3 * grid.columnSpacing)
-          Layout.preferredHeight: Math.floor(grid.unit)
-          radius: Style.cornerRadius
-          color: addTileMouse.containsMouse
-            ? Util.alpha(Color.accent, Style.hoverFillAlpha)
-            : "transparent"
-          border.width: 1
-          border.color: Util.alpha(Color.foreground, 0.22)
-
-          Column {
-            anchors.centerIn: parent
-            width: parent.width - Style.space(12)
-            spacing: Style.space(2)
-
-            Text {
-              width: parent.width
-              horizontalAlignment: Text.AlignHCenter
-              text: "+"
-              color: Util.alpha(Color.foreground, 0.65)
-              font.family: Style.font.family
-              font.pixelSize: Style.font.title
-            }
-
-            Text {
-              width: parent.width
-              horizontalAlignment: Text.AlignHCenter
-              text: "Add a control"
-              color: Util.alpha(Color.foreground, 0.5)
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-            }
-          }
-
-          MouseArea {
-            id: addTileMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-              root.view = "catalog"
-              root.closePage()
-            }
-          }
-        }
       }
 
         // The floating copy. The original stays in place at 25% so the grid
@@ -1292,7 +1242,7 @@ Panel {
           Rectangle {
             anchors.fill: parent
             radius: Style.cornerRadius
-            color: Util.alpha(Color.background, 0.96)
+            color: Util.alpha(Color.background, 0.92)
             border.width: 1
             border.color: Util.alpha(Color.accent, 0.55)
           }
