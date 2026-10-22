@@ -39,6 +39,9 @@ Panel {
   // The user's display order. A section absent from it keeps its registry
   // position; dragging writes this array.
   property var order: []
+  // Empty canvas rows below the placed tiles, so a tile can be moved down
+  // without first placing something there.
+  property int extraRows: 0
 
   // Drag state. The ghost lives in the popup, outside the scroll view, so it
   // is not clipped by the grid while the pointer moves.
@@ -188,11 +191,17 @@ Panel {
     return placed
   }
 
-  readonly property int gridRows: {
+  readonly property int baseGridRows: {
     var rows = 1
     for (var i = 0; i < placements.length; i++)
       rows = Math.max(rows, placements[i].row + placements[i].rows)
     return rows
+  }
+  readonly property int gridRows: baseGridRows + extraRows
+
+  function setExtraRows(n) {
+    extraRows = Math.max(0, Number(n) || 0)
+    saveLayout()
   }
 
   function placementById(id) {
@@ -420,6 +429,7 @@ Panel {
     var col = Math.round(localX / step)
     var row = Math.max(0, Math.round(localY / step))
     col = Math.max(0, Math.min(4 - p.span, col))
+    row = Math.min(row, Math.max(0, gridRows - p.rows))
     dropCol = col
     dropRow = row
 
@@ -510,7 +520,7 @@ Panel {
   }
 
   function saveLayout() {
-    var payload = JSON.stringify({ version: 1, order: order, entries: layout })
+    var payload = JSON.stringify({ version: 1, order: order, extraRows: extraRows, entries: layout })
     Quickshell.execDetached(["bash", "-c",
       "printf '%s' " + Util.shellQuote(payload) + " > " + Util.shellQuote(root.layoutPath)])
   }
@@ -714,6 +724,9 @@ Panel {
     function place(id: string, col: int, row: int) {
       root.moveTo(String(id), col, row)
     }
+    function canvasRows(n: int) {
+      root.setExtraRows(n)
+    }
   }
 
   // ---- section registry -------------------------------------------------
@@ -768,6 +781,7 @@ Panel {
         var parsed = JSON.parse(text() || "{}")
         root.layout = parsed.entries || ({})
         root.order = parsed.order || []
+        root.extraRows = Math.max(0, Number(parsed.extraRows || 0))
       } catch (e) {
         console.warn("deck: ~/.config/deck/layout.json is not valid JSON:", e)
       }
@@ -1195,6 +1209,84 @@ Panel {
         color: Util.alpha(Color.foreground, 0.1)
       }
 
+      // ---------------- canvas rows ----------------
+      Item {
+        width: parent.width
+        height: Style.space(22)
+        visible: !root.pageOpen && root.view === "grid" && root.editing
+
+        Text {
+          anchors.left: parent.left
+          anchors.verticalCenter: parent.verticalCenter
+          text: "Canvas"
+          color: Util.alpha(Color.foreground, 0.45)
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          font.letterSpacing: 1.5
+        }
+
+        Row {
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Style.space(6)
+
+          Rectangle {
+            width: addRowText.implicitWidth + Style.space(16)
+            height: Style.space(20)
+            radius: Style.cornerRadius
+            color: addRowMouse.containsMouse
+              ? Util.alpha(Color.accent, Style.hoverFillAlpha) : "transparent"
+            border.width: 1
+            border.color: Util.alpha(Color.accent, 0.45)
+
+            Text {
+              id: addRowText
+              anchors.centerIn: parent
+              text: "+ 1 row"
+              color: Color.accent
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+
+            MouseArea {
+              id: addRowMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.setExtraRows(root.extraRows + 1)
+            }
+          }
+
+          Rectangle {
+            visible: root.extraRows > 0
+            width: removeRowText.implicitWidth + Style.space(16)
+            height: Style.space(20)
+            radius: Style.cornerRadius
+            color: removeRowMouse.containsMouse
+              ? Util.alpha(Color.urgent, 0.12) : "transparent"
+            border.width: 1
+            border.color: Util.alpha(Color.foreground, 0.3)
+
+            Text {
+              id: removeRowText
+              anchors.centerIn: parent
+              text: "− 1 row"
+              color: Color.foreground
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+
+            MouseArea {
+              id: removeRowMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.setExtraRows(root.extraRows - 1)
+            }
+          }
+        }
+      }
+
       // ---------------- grid ----------------
       // Absolute placement in a four-column cell grid. The host exists so the
       // drag ghost and the tiles share a coordinate space inside the scroll.
@@ -1203,6 +1295,27 @@ Panel {
         width: parent.width
         height: root.gridRows * root.gridUnit + Math.max(0, root.gridRows - 1) * root.gridGap
         visible: !root.pageOpen && root.view === "grid"
+
+        // Empty canvas rows are drawn as faint cells in edit mode, so there
+        // is a visible place to move a tile into.
+        Repeater {
+          model: root.extraRows * 4
+
+          delegate: Rectangle {
+            required property int index
+            readonly property int cellCol: index % 4
+            readonly property int cellRow: root.baseGridRows + Math.floor(index / 4)
+            visible: root.editing && root.extraRows > 0
+            x: cellCol * (root.gridUnit + root.gridGap)
+            y: cellRow * (root.gridUnit + root.gridGap)
+            width: root.gridUnit
+            height: root.gridUnit
+            radius: Style.cornerRadius
+            color: "transparent"
+            border.width: 1
+            border.color: Util.alpha(Color.foreground, 0.07)
+          }
+        }
 
         // The model is the registry, not the placements: a drag changes
         // positions, not the set of sections, so delegates (and their live

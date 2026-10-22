@@ -36,9 +36,11 @@ registry() {
 
 ENTRIES='{}'
 ORDER='[]'
+EXTRA_ROWS=0
 if [[ -f $LAYOUT ]]; then
   ENTRIES="$(jq -c '.entries // {}' "$LAYOUT" 2>/dev/null || echo '{}')"
   ORDER="$(jq -c '.order // []' "$LAYOUT" 2>/dev/null || echo '[]')"
+  EXTRA_ROWS="$(jq -r '.extraRows // 0' "$LAYOUT" 2>/dev/null || echo 0)"
 fi
 
 cmd="${1:-}"
@@ -90,8 +92,10 @@ case "$cmd" in
     order="$(jq -r '.[] | .id' <(jq -s '.' "$tmp") 2>/dev/null | jq -R -s -c 'split("\n") | map(select(length > 0))')"
 
     mkdir -p "$(dirname "$OUT")"
-    jq -s --argjson order "$order" --arg exported "$(date -Iseconds)" \
-      '{version:1, kind:"deck-layout", exported:$exported, order:$order, sections:.}' \
+    jq -s --argjson order "$order" --argjson extraRows "$EXTRA_ROWS" \
+      --arg exported "$(date -Iseconds)" \
+      '{version:1, kind:"deck-layout", exported:$exported,
+        extraRows:$extraRows, order:$order, sections:.}' \
       "$tmp" > "$tmp.new"
     mv "$tmp.new" "$OUT"
     jq -nc --arg path "$OUT" --argjson count "$(jq -s 'length' "$tmp")" \
@@ -166,8 +170,10 @@ case "$cmd" in
     mkdir -p "$(dirname "$LAYOUT")"
     tmp="$(mktemp)"
     trap 'rm -f "$tmp"' EXIT
+    extra="$(jq -r '.extraRows // 0' "$IN" 2>/dev/null || echo 0)"
     jq -n --argjson order "$full_order" --argjson entries "$ENTRIES_NEW" \
-      '{version:1, order:$order, entries:$entries}' > "$tmp"
+      --argjson extraRows "$extra" \
+      '{version:1, extraRows:$extraRows, order:$order, entries:$entries}' > "$tmp"
     mv "$tmp" "$LAYOUT"
 
     jq -nc --argjson imported "$imported" --argjson installed "$installed" \

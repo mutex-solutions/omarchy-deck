@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.1
+
+- **Empty canvas rows.** In edit mode, Canvas has `+ 1 row` and `- 1 row`. Each
+  added row is four faint empty cells at the bottom of the grid, so a tile can
+  be dragged down even when the content already fills the canvas. Click twice
+  for two rows.
+- `extraRows` is stored in `layout.json` and carried in shared decks.
+- The Canvas control sits above the grid, so it is visible without scrolling
+  past the tiles.
+
 ## 0.8.0
 
 - **The grid is a free four-column canvas.** A tile now has a column and a row
