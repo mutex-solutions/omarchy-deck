@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.2
+
+- The empty canvas exists **only in edit mode**. Leaving edit collapses the
+  deck back to its content; the rows return when Edit is pressed again.
+- In edit mode **every empty cell** is drawn as a faint square, not just the
+  added rows: gaps left by free placement are visible places to drag a tile
+  into. Cells under a tile stay hidden.
+
 ## 0.8.1
 
 - **Empty canvas rows.** In edit mode, Canvas has `+ 1 row` and `- 1 row`. Each

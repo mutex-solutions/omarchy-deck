@@ -198,6 +198,19 @@ Panel {
     return rows
   }
   readonly property int gridRows: baseGridRows + extraRows
+  // The extra canvas is an editing aid: outside edit mode the deck ends at
+  // its content.
+  readonly property int displayRows: baseGridRows + (editing ? extraRows : 0)
+
+  function cellOccupied(col, row) {
+    for (var i = 0; i < placements.length; i++) {
+      var p = placements[i]
+      if (col >= p.col && col < p.col + p.span
+          && row >= p.row && row < p.row + p.rows)
+        return true
+    }
+    return false
+  }
 
   function setExtraRows(n) {
     extraRows = Math.max(0, Number(n) || 0)
@@ -1293,19 +1306,21 @@ Panel {
       Item {
         id: gridHost
         width: parent.width
-        height: root.gridRows * root.gridUnit + Math.max(0, root.gridRows - 1) * root.gridGap
+        height: root.displayRows * root.gridUnit
+          + Math.max(0, root.displayRows - 1) * root.gridGap
         visible: !root.pageOpen && root.view === "grid"
 
-        // Empty canvas rows are drawn as faint cells in edit mode, so there
-        // is a visible place to move a tile into.
+        // Every empty cell in the canvas is drawn in edit mode: the extra
+        // rows, and the gaps left by free placement. The cells under a tile
+        // stay hidden; the tile is the surface there.
         Repeater {
-          model: root.extraRows * 4
+          model: root.editing ? root.displayRows * 4 : 0
 
           delegate: Rectangle {
             required property int index
             readonly property int cellCol: index % 4
-            readonly property int cellRow: root.baseGridRows + Math.floor(index / 4)
-            visible: root.editing && root.extraRows > 0
+            readonly property int cellRow: Math.floor(index / 4)
+            visible: !root.cellOccupied(cellCol, cellRow)
             x: cellCol * (root.gridUnit + root.gridGap)
             y: cellRow * (root.gridUnit + root.gridGap)
             width: root.gridUnit
@@ -1313,7 +1328,7 @@ Panel {
             radius: Style.cornerRadius
             color: "transparent"
             border.width: 1
-            border.color: Util.alpha(Color.foreground, 0.07)
+            border.color: Util.alpha(Color.foreground, 0.10)
           }
         }
 
