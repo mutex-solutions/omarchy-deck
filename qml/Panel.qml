@@ -62,7 +62,19 @@ Panel {
 
   // The embedded catalog of first-party sections. It is only a list of what
   // can be installed; the registry is what is actually installed.
-  property var catalog: []
+  property var catalogBase: []
+  // Entries fetched from the user's section sources (scripts/deck-sections sync).
+  property var catalogExtra: []
+  readonly property var catalog: {
+    var out = catalogBase.slice()
+    var seen = {}
+    for (var i = 0; i < out.length; i++) seen[String(out[i].id)] = true
+    for (var j = 0; j < catalogExtra.length; j++) {
+      var k = String(catalogExtra[j].id)
+      if (seen[k] === undefined) { seen[k] = true; out.push(catalogExtra[j]) }
+    }
+    return out
+  }
 
   // The size page is for one section: chooserId names it.
   property string chooserId: ""
@@ -794,6 +806,11 @@ Panel {
       root.view = "catalog"
       root.installSection(String(url), "", "", "")
     }
+    function manageSections() {
+      root.closePage()
+      root.view = "manage"
+      root.open()
+    }
     function status(): string {
       if (root.installing) return "installing"
       return root.installError !== "" ? root.installError : root.installStatus
@@ -886,10 +903,21 @@ Panel {
     onLoaded: {
       try {
         var parsed = JSON.parse(text() || "{}")
-        root.catalog = parsed.sections || []
+        root.catalogBase = parsed.sections || []
       } catch (e) {
         console.warn("deck: catalog.json is not valid JSON:", e)
       }
+    }
+  }
+
+  FileView {
+    id: catalogExtraFile
+    path: Quickshell.env("HOME") + "/.config/deck/catalog-extra.json"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      try { root.catalogExtra = (JSON.parse(text() || "{}").sections) || [] } catch (e) {}
     }
   }
 
@@ -1181,6 +1209,7 @@ Panel {
         if (root.pageOpen) root.closePage()
         else if (root.view === "size") root.view = "catalog"
         else if (root.view === "catalog") root.view = "grid"
+        else if (root.view === "manage") root.view = "grid"
         else if (root.editing) root.cancelEdit()
         else root.close()
       }
@@ -1218,6 +1247,38 @@ Panel {
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
           font.letterSpacing: 1.5
+        }
+
+        Rectangle {
+          id: manageChip
+          visible: !root.editing
+          anchors.right: editChip.left
+          anchors.rightMargin: Style.space(6)
+          anchors.verticalCenter: parent.verticalCenter
+          width: manageText.implicitWidth + Style.space(16)
+          height: Style.space(20)
+          radius: Style.cornerRadius
+          color: manageMouse.containsMouse
+            ? Util.alpha(Color.accent, Style.hoverFillAlpha) : "transparent"
+          border.width: 1
+          border.color: Util.alpha(Color.foreground, 0.32)
+
+          Text {
+            id: manageText
+            anchors.centerIn: parent
+            text: "Sections"
+            color: Color.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+
+          MouseArea {
+            id: manageMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.view = "manage"
+          }
         }
 
         Rectangle {
@@ -1433,6 +1494,20 @@ Panel {
             }
           }
         }
+      }
+
+      // ---------------- sections: install, update, remove ----------------
+      Manage {
+        width: parent.width
+        visible: !root.pageOpen && root.view === "manage"
+        pluginDir: root.pluginDir
+        installing: root.installing
+        installStatus: root.installStatus
+        installError: root.installError
+        onBack: root.view = "grid"
+        onInstallRequested: function(url) { root.installSection(url, "", "", "") }
+        onRegistryChanged: root.reloadRegistry()
+        onVisibleChanged: if (visible) refresh()
       }
 
       // ---------------- grid ----------------

@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+#
+# Manage the sections Deck hosts: what is installed, whether it is the latest,
+# how to update or remove it, and where new sections can come from.
+#
+#   deck-sections list                     installed sections and their versions
+#   deck-sections check                    list, plus the latest version of each
+#   deck-sections update <plugin-id>       omarchy plugin update (refuses a dirty clone)
+#   deck-sections remove <id> [--uninstall]
+#                                          take a section off the deck; with
+#                                          --uninstall also delete its plugin
+#   deck-sections sources                  where extra catalogs come from
+#   deck-sections source-add <github-url|json-url> [name]
+#   deck-sections source-remove <id>
+#   deck-sections sync                     fetch every source into catalog-extra.json
+#
+# One JSON object on stdout, always. Exit 0 only when the action happened.
+#
+# A "source" is a catalog: a JSON file shaped like Deck's catalog.json
+# ({"sections":[{id, title, repo, ...}]}), given either directly as a URL or as a
+# GitHub repository that has catalog.json at its root. The bundled catalog is
+# always present and cannot be removed.
+
+set -uo pipefail
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
+PLUGINS="$CONFIG/omarchy/plugins"
+USER_REG="$CONFIG/deck/sections.json"
+SOURCES="$CONFIG/deck/section-sources.json"
+EXTRA="$CONFIG/deck/catalog-extra.json"
+LAYOUT="$CONFIG/deck/layout.json"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+BUNDLED="$SCRIPT_DIR/../sections.json"
+SELF_ID="mutex-solutions.deck"
+
+fail() {
+  jq -nc --arg error "$1" '{ok:false,error:$error}' 2>/dev/null \
+    || printf '{"ok":false,"error":"%s"}\n' "$1"
+  exit 1
+}
+
+command -v jq >/dev/null || fail "jq is required"
+
+registry_file() {
+  if [[ -f $USER_REG ]]; then printf '%s\n' "$USER_REG"
+  elif [[ -f $BUNDLED ]]; then printf '%s\n' "$BUNDLED"; fi
+}
+
+# https://github.com/o/r(.git) or git@github.com:o/r -> o/r
+slug_of() {
+  local u="$1"
+  u="${u%.git}"; u="${u%/}"
+  u="${u#https://github.com/}"; u="${u#http://github.com/}"; u="${u#git@github.com:}"
+  [[ $u =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] && printf '%s\n' "$u"
+}
+
+# Latest version of a plugin repo: the manifest on its default branch. `gh`
+# reads private repositories with the user's login; plain raw URLs do for public.
+remote_version() {
+  local slug="$1" v=""
+  if command -v gh >/dev/null 2>&1; then
+    v="$(timeout 20 gh api "repos/$slug/contents/manifest.json" -q .content 2>/dev/null \
+      | base64 -d 2>/dev/null | jq -r '.version // empty' 2>/dev/null || true)"
+  fi
+  if [[ -z $v ]]; then
+    for b in main master; do
+      v="$(curl -fsL --max-time 15 "https://raw.githubusercontent.com/$slug/$b/manifest.json" 2>/dev/null \
+        | jq -r '.version // empty' 2>/dev/null || true)"
+      [[ -n $v ]] && break
+    done
+  fi
+  printf '%s\n' "$v"
+}
+
+newer() { # newer A B: is A newer than B
+  [[ $1 != "$2" && "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" ]]
+}
+
+# One JSON line per registered section.
+installed_rows() {
+  local reg; reg="$(registry_file)"
+  [[ -n $reg ]] || return 0
+  jq -r '.sections[] | [.id, (.title // .id), .file] | @tsv' "$reg" | while IFS=$'\t' read -r id title file; do
+    local dir="" pid="" ver="" repo="" dirty=false
+    if [[ $file == "$PLUGINS"/* ]]; then
+      dir="${file#"$PLUGINS"/}"; dir="${dir%%/*}"
+    elif [[ $file != /* ]]; then
+      dir="$(basename "$(cd "$SCRIPT_DIR/.." && pwd)")"
+    fi
+    if [[ -n $dir && -f $PLUGINS/$dir/manifest.json ]]; then
+      pid="$(jq -r '.id // empty' "$PLUGINS/$dir/manifest.json")"
+      ver="$(jq -r '.version // empty' "$PLUGINS/$dir/manifest.json")"
+      repo="$(git -C "$PLUGINS/$dir" remote get-url origin 2>/dev/null || true)"
+      [[ -n $(git -C "$PLUGINS/$dir" status --porcelain 2>/dev/null) ]] && dirty=true
+    fi
+    jq -nc --arg id "$id" --arg title "$title" --arg pid "$pid" --arg ver "$ver" \
+      --arg repo "$repo" --arg slug "$(slug_of "$repo" || true)" --argjson dirty "$dirty" \
+      '{id:$id, title:$title, pluginId:$pid, version:$ver, repo:$repo, slug:$slug, dirty:$dirty}'
+  done
+}
+
+case "${1:-}" in
+  list)
+    installed_rows | jq -sc '{ok:true, sections:.}' ;;
+
+  check)
+    rows="$(installed_rows | jq -sc .)"
+    out="[]"
+    n="$(jq 'length' <<< "$rows")"
+    tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+    # Several sections share a repo only by mistake, but each needs its own
+    # network call: run them side by side so ten sections cost one timeout.
+    for ((i = 0; i < n; i++)); do
+      (
+        slug="$(jq -r ".[$i].slug" <<< "$rows")"
+        ver="$(jq -r ".[$i].version" <<< "$rows")"
+        latest=""; state="local"
+        if [[ -n $slug ]]; then
+          latest="$(remote_version "$slug")"
+          if [[ -z $latest ]]; then state="unknown"
+          elif newer "$latest" "$ver"; then state="update"
+          elif [[ $latest == "$ver" ]]; then state="latest"
+          else state="ahead"; fi
+        fi
+        jq -c ".[$i] + {latest:\$l, state:\$s}" --arg l "$latest" --arg s "$state" <<< "$rows" > "$tmp/$i.json"
+      ) &
+    done
+    wait
+    for ((i = 0; i < n; i++)); do cat "$tmp/$i.json"; done | jq -sc '{ok:true, sections:.}' ;;
+
+  update)
+    pid="${2:-}"; [[ -n $pid ]] || fail "usage: deck-sections update <plugin-id>"
+    installed_rows | jq -e --arg p "$pid" 'select(.pluginId == $p)' >/dev/null \
+      || fail "$pid is not an installed section"
+    pdir="$(grep -l "\"id\": *\"$pid\"" "$PLUGINS"/*/manifest.json 2>/dev/null | head -1)"; pdir="$(dirname "${pdir:-/nonexistent}")"
+    [[ -d $pdir/.git ]] || fail "$pid is not a git clone, so it cannot be updated"
+    [[ -z $(git -C "$pdir" status --porcelain 2>/dev/null) ]] \
+      || fail "$pid has local changes; commit or discard them first"
+    out="$(omarchy plugin update "$pid" --yes 2>&1)" || fail "update failed: $(tail -2 <<< "$out" | tr '\n' ' ')"
+    jq -nc --arg id "$pid" --arg version "$(jq -r .version "$pdir/manifest.json")" \
+      '{ok:true, updated:$id, version:$version, restart:true}' ;;
+
+  remove)
+    id="${2:-}"; [[ -n $id ]] || fail "usage: deck-sections remove <id> [--uninstall]"
+    reg="$(registry_file)"; [[ -n $reg ]] || fail "no section registry"
+    jq -e --arg id "$id" 'any(.sections[]; .id == $id)' "$reg" >/dev/null || fail "no section named $id"
+    pid="$(installed_rows | jq -r --arg id "$id" 'select(.id == $id) | .pluginId' | head -1)"
+    [[ $pid != "$SELF_ID" ]] || fail "Deck cannot remove itself"
+    mkdir -p "$(dirname "$USER_REG")"
+    tmp="$(mktemp)"
+    jq --arg id "$id" '.sections |= map(select(.id != $id))' "$reg" > "$tmp" \
+      && jq -e . "$tmp" >/dev/null && mv "$tmp" "$USER_REG" || { rm -f "$tmp"; fail "the registry could not be written"; }
+    if [[ -f $LAYOUT ]]; then
+      tmp="$(mktemp)"
+      jq --arg id "$id" 'del(.entries[$id]) | .order = ((.order // []) - [$id])' "$LAYOUT" > "$tmp" \
+        && jq -e . "$tmp" >/dev/null && mv "$tmp" "$LAYOUT" || rm -f "$tmp"
+    fi
+    if [[ ${3:-} == --uninstall && -n $pid ]]; then
+      omarchy plugin remove "$pid" --yes >/dev/null 2>&1 || fail "removed from the deck, but the plugin could not be uninstalled"
+    fi
+    jq -nc --arg id "$id" '{ok:true, removed:$id}' ;;
+
+  sources|source-add|source-remove|sync)
+    [[ -s $SOURCES ]] && jq -e 'type=="array"' "$SOURCES" >/dev/null 2>&1 || {
+      mkdir -p "$(dirname "$SOURCES")"; echo '[]' > "$SOURCES"; }
+    list_sources() {
+      jq -c '{ok:true, sources: ([{id:"bundled", name:"Bundled catalog", target:"built in", builtin:true}] + .)}' "$SOURCES"
+    }
+    case "$1" in
+      sources) list_sources ;;
+      source-add)
+        target="${2:-}"; name="${3:-}"; [[ -n $target ]] || fail "usage: deck-sections source-add <github-url|json-url> [name]"
+        if slug="$(slug_of "$target")"; then
+          url="https://raw.githubusercontent.com/$slug/HEAD/catalog.json"; : "${name:=${slug#*/}}"
+          target="$slug"
+        elif [[ $target =~ ^https:// ]]; then
+          url="$target"; : "${name:=$(basename "${target%%\?*}" .json)}"
+        else
+          fail "give a GitHub repository (owner/repo) or an https address"
+        fi
+        data="$(curl -fsL --max-time 20 "$url" 2>/dev/null)" || {
+          # A private repo is not reachable by a raw URL; the login is.
+          data=""
+          [[ -n ${slug:-} ]] && data="$(timeout 20 gh api "repos/$slug/contents/catalog.json" -q .content 2>/dev/null | base64 -d 2>/dev/null)"
+        }
+        jq -e '.sections | type == "array" and length > 0' <<< "$data" >/dev/null 2>&1 \
+          || fail "that address has no catalog of sections (catalog.json with a sections list)"
+        id="$(tr '[:upper:] ' '[:lower:]-' <<< "$name" | tr -cd 'a-z0-9-')"; [[ -n $id ]] || id=source
+        base="$id"; k=2
+        while [[ $id == bundled ]] || jq -e --arg id "$id" 'any(.[]; .id == $id)' "$SOURCES" >/dev/null; do id="$base-$k"; k=$((k+1)); done
+        jq -c --arg id "$id" --arg name "$name" --arg target "$target" --arg url "$url" \
+          '. + [{id:$id, name:$name, target:$target, url:$url}]' "$SOURCES" > "$SOURCES.tmp" && mv "$SOURCES.tmp" "$SOURCES"
+        "$0" sync >/dev/null 2>&1 || true
+        list_sources ;;
+      source-remove)
+        id="${2:-}"; jq -e --arg id "$id" 'any(.[]; .id == $id)' "$SOURCES" >/dev/null || fail "no removable source named $id"
+        jq -c --arg id "$id" 'map(select(.id != $id))' "$SOURCES" > "$SOURCES.tmp" && mv "$SOURCES.tmp" "$SOURCES"
+        "$0" sync >/dev/null 2>&1 || true
+        list_sources ;;
+      sync)
+        acc="[]"
+        while IFS=$'\t' read -r id url target; do
+          data="$(curl -fsL --max-time 20 "$url" 2>/dev/null)"
+          if ! jq -e '.sections|type=="array"' <<< "$data" >/dev/null 2>&1 && slug_of "$target" >/dev/null; then
+            data="$(timeout 20 gh api "repos/$target/contents/catalog.json" -q .content 2>/dev/null | base64 -d 2>/dev/null)"
+          fi
+          jq -e '.sections|type=="array"' <<< "$data" >/dev/null 2>&1 || continue
+          acc="$(jq -c --argjson add "$(jq -c --arg sid "$id" '[.sections[] | select(.repo != null) | . + {source:$sid}]' <<< "$data")" '. + $add' <<< "$acc")"
+        done < <(jq -r '.[] | [.id, .url, .target] | @tsv' "$SOURCES")
+        jq -nc --argjson s "$acc" '{version:1, sections:$s}' > "$EXTRA.tmp" && mv "$EXTRA.tmp" "$EXTRA"
+        jq -nc --argjson n "$(jq 'length' <<< "$acc")" '{ok:true, entries:$n}' ;;
+    esac ;;
+
+  *) fail "usage: deck-sections list|check|update|remove|sources|source-add|source-remove|sync" ;;
+esac

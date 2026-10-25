@@ -70,6 +70,27 @@ buttons clickable in edit mode; drag it by the grip in its top-left corner.
 A registry entry marked `"hidden": true` is only a default: it can be placed
 from the add page and stays instantiated either way so its page is reachable.
 
+## Managing sections
+
+**Sections** (header, next to Edit) lists what is installed, each with its
+version and whether GitHub has a newer one. **Reload** re-reads the registry
+and re-checks. **Update** pulls the plugin (a clone with local changes is
+refused); **Remove** takes it off the deck and keeps the plugin installed.
+Paste a GitHub link on the same page to install a section.
+
+Extra sections come from **sources**: a repository with a `catalog.json` at its
+root, or an https address returning one (same shape as this repository's
+`catalog.json`). Add or remove them on the page; what they list appears on the
+Add page. The same operations work without the panel:
+
+```bash
+deck-sections check
+deck-sections update mutex-solutions.audio
+deck-sections remove audio
+deck-sections source-add owner/repo
+omarchy-shell mutex-solutions.deck manageSections
+```
+
 ## Sharing a deck
 
 **Export** on the add page writes `~/.config/deck/deck-layout.json`:

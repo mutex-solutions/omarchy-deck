@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.10.0
+
+- **Section management.** A **Sections** button in the header opens a page
+  that lists every installed section with its version and whether it is the
+  latest on GitHub (`latest`, `v0.1.1 to v0.1.2`, `ahead of GitHub`, `could not
+  check`, `edited here` for a clone with local changes). **Reload** re-reads
+  the registry and re-checks every version. **Update** runs
+  `omarchy plugin update` and refuses a clone with local changes; **Remove**
+  (asks twice) takes the section off the deck and leaves the plugin installed,
+  so it can be added back. After an update the page offers **Restart shell**.
+- **Install from a GitHub link** is now on that page as well as under
+  Edit > Add.
+- **Section sources.** A source is a catalog: a `catalog.json` in a GitHub
+  repository, or any https address returning the same shape. Add and remove
+  them on the page; their entries join the bundled catalog on the Add page. The
+  bundled catalog is always present and cannot be removed. Stored in
+  `~/.config/deck/section-sources.json`, fetched into
+  `~/.config/deck/catalog-extra.json`.
+- New `scripts/deck-sections` does the work (`list`, `check`, `update`,
+  `remove`, `sources`, `source-add`, `source-remove`, `sync`) and prints one
+  JSON object per call. New IPC: `manageSections`.
+
 ## 0.9.2
 
 - **Pages show that they scroll.** A page was capped at a fixed 420 px with its
