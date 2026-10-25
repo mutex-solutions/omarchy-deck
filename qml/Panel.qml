@@ -745,6 +745,22 @@ Panel {
     pageTitle = ""
   }
 
+  // A page with views of its own (Audio > Equalizer > Sources) says so through
+  // `trail`, `canGoBack`, `goBack()` and `goTo(i)`. Back, Esc and the crumbs in
+  // the header all go through here, so a nested view is never a dead end.
+  readonly property var pageTrail: pageLoader.item && pageLoader.item.trail ? pageLoader.item.trail : []
+
+  function pageBack() {
+    var it = pageLoader.item
+    if (it && it.canGoBack === true && typeof it.goBack === "function") it.goBack()
+    else closePage()
+  }
+
+  function pageGoTo(index) {
+    var it = pageLoader.item
+    if (it && typeof it.goTo === "function") it.goTo(index)
+  }
+
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
@@ -767,7 +783,7 @@ Panel {
       root.openPage(entry)
       root.open()
     }
-    function back() { root.closePage() }
+    function back() { root.pageBack() }
     function edit() {
       root.beginEdit()
       root.view = "catalog"
@@ -1206,7 +1222,7 @@ Panel {
       anchors.fill: parent
       onCloseRequested: {
         // Esc walks back through the layout pages before it closes the panel.
-        if (root.pageOpen) root.closePage()
+        if (root.pageOpen) root.pageBack()
         else if (root.view === "size") root.view = "catalog"
         else if (root.view === "catalog") root.view = "grid"
         else if (root.view === "manage") root.view = "grid"
@@ -2374,7 +2390,7 @@ Panel {
               anchors.fill: parent
               hoverEnabled: true
               cursorShape: Qt.PointingHandCursor
-              onClicked: root.closePage()
+              onClicked: root.pageBack()
             }
           }
 
@@ -2382,10 +2398,63 @@ Panel {
             height: parent.height
             verticalAlignment: Text.AlignVCenter
             text: root.pageTitle
-            color: Color.foreground
+            color: root.pageTrail.length > 0
+              ? (titleMouse.containsMouse ? Color.accent : Util.alpha(Color.foreground, 0.6))
+              : Color.foreground
             font.family: Style.font.family
             font.pixelSize: Style.font.title
-            font.bold: true
+            font.bold: root.pageTrail.length === 0
+
+            MouseArea {
+              id: titleMouse
+              anchors.fill: parent
+              enabled: root.pageTrail.length > 0
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.pageGoTo(-1)
+            }
+          }
+
+          Repeater {
+            model: root.pageTrail
+
+            delegate: Row {
+              id: crumb
+              required property var modelData
+              required property int index
+              readonly property bool last: index === root.pageTrail.length - 1
+              height: Style.space(24)
+              spacing: Style.space(8)
+
+              Text {
+                height: parent.height
+                verticalAlignment: Text.AlignVCenter
+                text: "›"
+                color: Util.alpha(Color.foreground, 0.4)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.title
+              }
+
+              Text {
+                height: parent.height
+                verticalAlignment: Text.AlignVCenter
+                text: String(crumb.modelData)
+                color: crumb.last ? Color.foreground
+                  : (crumbMouse.containsMouse ? Color.accent : Util.alpha(Color.foreground, 0.6))
+                font.family: Style.font.family
+                font.pixelSize: Style.font.title
+                font.bold: crumb.last
+
+                MouseArea {
+                  id: crumbMouse
+                  anchors.fill: parent
+                  enabled: !crumb.last
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.pageGoTo(crumb.index)
+                }
+              }
+            }
           }
         }
 

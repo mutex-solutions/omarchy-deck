@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.1
+
+- **Universal back for nested pages.** A page can declare `trail`,
+  `canGoBack`, `goBack()` and `goTo(i)` (docs/CONTRACT.md). The header's back
+  arrow, Esc and the `back` IPC call then step up one view instead of closing
+  the page, and the header shows clickable crumbs (`Audio > Equalizer`).
+
 ## 0.10.0
 
 - **Section management.** A **Sections** button in the header opens a page

@@ -82,6 +82,20 @@ grab when the pointer wanders vertically and the drag stops.
 The page renders content only. The host draws the back button, the title, and
 the frame. A page that draws its own back button is a contract violation.
 
+**Views inside a page.** A page that has views of its own (Audio opens an
+equalizer, which opens a sources page) must not draw a second breadcrumb or
+back button. It declares them and the host draws them:
+
+| Member | Type | Meaning |
+| --- | --- | --- |
+| `trail` | `var` (array of strings) | the labels below the page title, outermost first; empty at the top view |
+| `canGoBack` | `bool` | true while a nested view is showing |
+| `goBack()` | function | one step up; the host calls it for the back button, Esc and the `back` IPC call |
+| `goTo(i)` | function | jump to a crumb: `-1` is the page's top view, `0` the first label in `trail` |
+
+With none of these declared, back closes the page, as before. The header shows
+`Title > Equalizer > Sources`, each earlier label clickable.
+
 `host.open` is whether the page is actually on screen: the panel is open and
 the page has not been closed. Anything with a running cost (a capture meter, a
 poll, a busy-loop animation) must bind to it rather than to its own existence.
