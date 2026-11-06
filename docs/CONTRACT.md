@@ -69,7 +69,9 @@ Prefer glyphs from one family (Material Design in Nerd Fonts). Mixing Unicode
 symbols with Nerd Font glyphs gives icons of visibly different size and weight.
 
 A custom body owns its own clicks. While the deck is in edit mode the host
-gesture sits above it, so the tile can still be dragged and held. A section
+gesture sits above it, so the tile can still be dragged and held. A body with its
+own hold declares `signal holdStarted()` and `signal holdEnded()` and emits them
+around the hold; the host then draws the same progress hairline as on any tile. A section
 with none of the four size components gets Deck's default body: icon, title
 and detail, or icon and title at 1x1.
 

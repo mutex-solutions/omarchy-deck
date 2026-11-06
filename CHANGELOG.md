@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.3
+
+- A custom tile body can report its hold (`holdStarted`, `holdEnded`) and gets the same progress hairline. Sessions, Audio, Display and Calendar do.
+- Calendar installs as 4x1.
+
 ## 0.10.2
 
 - **Calendar joins the bundle and the catalog.**

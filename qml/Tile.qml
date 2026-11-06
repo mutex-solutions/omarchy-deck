@@ -94,9 +94,19 @@ Item {
   // children ("Row will not function") and lays them out anyway, leaving the
   // hit area subtly wrong.
   Loader {
+    id: bodyLoader
     anchors.fill: parent
     visible: tile.custom
     sourceComponent: tile.sizedComponent
+  }
+
+  // A custom body owns its clicks, so the gesture below never sees its presses.
+  // A body with a hold of its own reports it here to get the same hairline.
+  Connections {
+    target: bodyLoader.item
+    ignoreUnknownSignals: true
+    function onHoldStarted() { showProgress.restart() }
+    function onHoldEnded() { tile.endPress() }
   }
 
   // Compact size: an icon with the title under it. The title is what makes a
