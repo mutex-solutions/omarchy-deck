@@ -4,6 +4,7 @@
 
 - The Sections page has the same back arrow as every other page, and the `back` call
   leaves it. It only had the Deck crumb.
+- Install and Add source say what is missing when their field is empty. They did nothing.
 
 ## 0.10.3
 

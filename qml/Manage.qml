@@ -483,7 +483,7 @@ Column {
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
       label: mg.installing ? "Installing…" : "Install"
-      onPicked: if (!mg.installing && urlField.text.trim() !== "") mg.installRequested(urlField.text)
+      onPicked: if (!mg.installing) mg.installRequested(urlField.text)
     }
 
     Text {
@@ -576,7 +576,12 @@ Column {
       anchors.verticalCenter: parent.verticalCenter
       label: mg.sourcesBusy ? "Checking…" : "Add source"
       onPicked: {
-        if (mg.sourcesBusy || sourceField.text.trim() === "") return
+        if (mg.sourcesBusy) return
+        if (sourceField.text.trim() === "") {
+          mg.sourceError = "Enter a repo or an address first"
+          return
+        }
+        mg.sourceError = ""
         mg.sourceAddPending = true
         mg.sourcesRun(["source-add", sourceField.text.trim()])
       }
