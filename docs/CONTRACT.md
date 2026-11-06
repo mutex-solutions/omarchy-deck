@@ -56,6 +56,7 @@ Required:
 | --- | --- | --- |
 | `section` | var | injected: the live section instance |
 | `host` | var | injected: `{ open, close(), notify(text) }` |
+| `preferredWidth` | real | optional: how wide the card should be while this page shows, clamped to the screen; must not depend on the page's own size. Without it the card keeps its usual width |
 
 A custom body that draws its own icon should put it in the same fixed cell as
 Deck's default body: a cell `Style.space(28)` wide, `Style.space(12)` in from

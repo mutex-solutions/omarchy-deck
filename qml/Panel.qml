@@ -670,15 +670,18 @@ Panel {
   // without the panel being open.
   property var sectionMap: ({})
 
-  // The first notice any section publishes. A section exposes
+  // The notice to draw, urgent before info. A section exposes
   // `notice = { severity, title, detail }` or null; Deck draws the strip, so the
   // grid stays pure controls and severity can be graded honestly.
   readonly property var notice: {
+    var first = null
     for (var id in sectionMap) {
       var item = sectionMap[id]
-      if (item && item.notice && item.notice.title) return item.notice
+      if (!item || !item.notice || !item.notice.title) continue
+      if (item.notice.severity === "urgent") return item.notice
+      if (!first) first = item.notice
     }
-    return null
+    return first
   }
 
   property string pageSource: ""
@@ -1202,7 +1205,10 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(380))
+    // A page may ask for a wider card (Calendar's month view). Constant per page,
+    // so this cannot feed back into the height the page measures.
+    contentWidth: panel.fittedContentWidth(root.pageOpen && pageLoader.item && pageLoader.item.preferredWidth > 0
+      ? pageLoader.item.preferredWidth : Style.space(380))
     // fittedContentHeight already adds verticalContentInset (padding * 2), so
     // adding padding here as well leaves a dead band under the content.
     // Arrange mode shows the size controls and the add list under the grid;

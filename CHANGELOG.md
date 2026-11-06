@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.2
+
+- **Calendar joins the bundle and the catalog.**
+- A page can ask for a wider card with `preferredWidth` (docs/CONTRACT.md).
+- The notice strip shows an urgent notice before an info one. It used to show
+  whichever section came first, so an info notice could hide an urgent one.
+
 ## 0.10.1
 
 - **Universal back for nested pages.** A page can declare `trail`,

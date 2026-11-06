@@ -50,6 +50,14 @@
       "sectionId": "lid-awake"
     },
     {
+      "id": "mutex-solutions.calendar",
+      "title": "Calendar",
+      "icon": "󰃭",
+      "repo": "https://github.com/mutex-solutions/omarchy-calendar",
+      "description": "Upcoming events, reminders and a month view from Google Calendar",
+      "sectionId": "calendar"
+    },
+    {
       "id": "mutex-solutions.wifi",
       "title": "Wi-Fi",
       "icon": "󰤨",
