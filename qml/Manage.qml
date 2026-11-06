@@ -257,9 +257,39 @@ Column {
     width: parent.width
     height: Style.space(24)
 
+    // The same arrow every other page has; the crumb is only the second way back.
+    Rectangle {
+      id: backArrow
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      width: Style.space(24)
+      height: Style.space(24)
+      radius: Style.cornerRadius
+      color: arrowMouse.containsMouse ? Util.alpha(Color.foreground, Style.hoverFillAlpha) : "transparent"
+      border.width: 1
+      border.color: Util.alpha(Color.foreground, Style.normalBorderAlpha)
+
+      Text {
+        anchors.centerIn: parent
+        text: "←"
+        color: Color.foreground
+        font.family: Style.font.family
+        font.pixelSize: Style.font.body
+      }
+
+      MouseArea {
+        id: arrowMouse
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: mg.back()
+      }
+    }
+
     Text {
       id: backText
-      anchors.left: parent.left
+      anchors.left: backArrow.right
+      anchors.leftMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
       text: "Deck"
       color: backMouse.containsMouse ? Color.accent : Util.alpha(Color.foreground, 0.6)

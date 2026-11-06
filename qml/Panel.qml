@@ -754,6 +754,10 @@ Panel {
   readonly property var pageTrail: pageLoader.item && pageLoader.item.trail ? pageLoader.item.trail : []
 
   function pageBack() {
+    if (!pageOpen && view === "manage") {
+      view = "grid"
+      return
+    }
     var it = pageLoader.item
     if (it && it.canGoBack === true && typeof it.goBack === "function") it.goBack()
     else closePage()

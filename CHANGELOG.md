@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.4
+
+- The Sections page has the same back arrow as every other page, and the `back` call
+  leaves it. It only had the Deck crumb.
+
 ## 0.10.3
 
 - A custom tile body can report its hold (`holdStarted`, `holdEnded`) and gets the same progress hairline. Sessions, Audio, Display and Calendar do.
