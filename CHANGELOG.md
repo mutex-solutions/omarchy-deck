@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.2
+
+- **Wide pages.** A page can declare `preferredWidth` (docs/CONTRACT.md) and
+  the panel widens to it while that page is open, capped to the screen. The
+  calendar's month + agenda uses it (860); every other view keeps 380.
+
 ## 0.10.1
 
 - **Universal back for nested pages.** A page can declare `trail`,

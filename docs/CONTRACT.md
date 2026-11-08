@@ -82,6 +82,12 @@ grab when the pointer wanders vertically and the drag stops.
 The page renders content only. The host draws the back button, the title, and
 the frame. A page that draws its own back button is a contract violation.
 
+**A wider card.** A page that needs room (the calendar's month next to its
+agenda) declares `preferredWidth` (`real`, pixels — use `Style.space(n)`). While
+that page is open the panel widens to it, capped to the screen; without it, and
+for every other view, the card stays 380 wide. Lay the page out for its actual
+`width`, which is smaller on a narrow screen.
+
 **Views inside a page.** A page that has views of its own (Audio opens an
 equalizer, which opens a sources page) must not draw a second breadcrumb or
 back button. It declares them and the host draws them:
