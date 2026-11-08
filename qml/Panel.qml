@@ -688,6 +688,9 @@ Panel {
   property string pageTitle: ""
   property string pageSectionId: ""
   readonly property bool pageOpen: pageSource !== ""
+  // Width the open page asks for (docs/CONTRACT.md, "Pages"); 0 = the default.
+  readonly property real pagePreferredWidth: pageOpen && pageLoader.item
+    && Number(pageLoader.item.preferredWidth) > 0 ? Number(pageLoader.item.preferredWidth) : 0
   // grid: the home surface. catalog: the list of every control. size: the
   // full previews for one control. Editing is a place you go, not a mode the
   // grid wears.
@@ -1209,10 +1212,10 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    // A page may ask for a wider card (Calendar's month view). Constant per page,
-    // so this cannot feed back into the height the page measures.
-    contentWidth: panel.fittedContentWidth(root.pageOpen && pageLoader.item && pageLoader.item.preferredWidth > 0
-      ? pageLoader.item.preferredWidth : Style.space(380))
+    // A page may ask for a wider card with `preferredWidth` (the calendar's
+    // month + agenda needs ~860). fittedContentWidth caps it to the screen, so
+    // a small display still gets a card that fits; every other view keeps 380.
+    contentWidth: panel.fittedContentWidth(Math.max(Style.space(380), root.pagePreferredWidth))
     // fittedContentHeight already adds verticalContentInset (padding * 2), so
     // adding padding here as well leaves a dead band under the content.
     // Arrange mode shows the size controls and the add list under the grid;

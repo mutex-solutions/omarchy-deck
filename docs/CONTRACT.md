@@ -56,7 +56,6 @@ Required:
 | --- | --- | --- |
 | `section` | var | injected: the live section instance |
 | `host` | var | injected: `{ open, close(), notify(text) }` |
-| `preferredWidth` | real | optional: how wide the card should be while this page shows, clamped to the screen; must not depend on the page's own size. Without it the card keeps its usual width |
 
 A custom body that draws its own icon should put it in the same fixed cell as
 Deck's default body: a cell `Style.space(28)` wide, `Style.space(12)` in from
@@ -84,6 +83,12 @@ grab when the pointer wanders vertically and the drag stops.
 
 The page renders content only. The host draws the back button, the title, and
 the frame. A page that draws its own back button is a contract violation.
+
+**A wider card.** A page that needs room (the calendar's month next to its
+agenda) declares `preferredWidth` (`real`, pixels — use `Style.space(n)`). While
+that page is open the panel widens to it, capped to the screen; without it, and
+for every other view, the card stays 380 wide. Lay the page out for its actual
+`width`, which is smaller on a narrow screen.
 
 **Views inside a page.** A page that has views of its own (Audio opens an
 equalizer, which opens a sources page) must not draw a second breadcrumb or

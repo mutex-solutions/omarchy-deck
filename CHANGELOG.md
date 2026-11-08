@@ -1,22 +1,24 @@
 # Changelog
 
-## 0.10.4
+## 0.10.5
 
+Merges this laptop's work with 0.10.2 from the other device. Both added
+`preferredWidth`; the other device's version is kept.
+
+- **Calendar joins the bundle and the catalog**, as a 4x1 tile.
+- The notice strip shows an urgent notice before an info one. It used to show
+  whichever section came first, so an info notice could hide an urgent one.
+- A custom tile body can report its hold (`holdStarted`, `holdEnded`) and gets the
+  same progress hairline. Sessions, Audio, Display and Calendar do.
 - The Sections page has the same back arrow as every other page, and the `back` call
   leaves it. It only had the Deck crumb.
 - Install and Add source say what is missing when their field is empty. They did nothing.
 
-## 0.10.3
-
-- A custom tile body can report its hold (`holdStarted`, `holdEnded`) and gets the same progress hairline. Sessions, Audio, Display and Calendar do.
-- Calendar installs as 4x1.
-
 ## 0.10.2
 
-- **Calendar joins the bundle and the catalog.**
-- A page can ask for a wider card with `preferredWidth` (docs/CONTRACT.md).
-- The notice strip shows an urgent notice before an info one. It used to show
-  whichever section came first, so an info notice could hide an urgent one.
+- **Wide pages.** A page can declare `preferredWidth` (docs/CONTRACT.md) and
+  the panel widens to it while that page is open, capped to the screen. The
+  calendar's month + agenda uses it (860); every other view keeps 380.
 
 ## 0.10.1
 
