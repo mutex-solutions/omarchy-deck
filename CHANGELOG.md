@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.6
 
 - **`scripts/deck-bar-position`** places the bar icon: `corner`, `start`,
   `before <id>`, `after <id>`, or `show`. A wrapper over `omarchy bar move`
