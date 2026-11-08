@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **`scripts/deck-bar-position`** places the bar icon: `corner`, `start`,
+  `before <id>`, `after <id>`, or `show`. A wrapper over `omarchy bar move`
+  that enables Deck in the right section first if it is not in the bar.
+- `install-bundle.sh` passes `--yes` to `omarchy plugin add`. Omarchy 4.5 asks to
+  confirm a third-party plugin and refuses when there is no terminal to ask in, so
+  the bundle stopped at the first plugin it had to add.
+
 ## 0.10.5
 
 Merges this laptop's work with 0.10.2 from the other device. Both added

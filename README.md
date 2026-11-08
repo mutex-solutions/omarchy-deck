@@ -39,6 +39,21 @@ one as a standalone bar widget.
 The bundle writes `~/.config/deck/sections.json`, which Deck prefers over the
 registry in its own checkout, so `omarchy plugin update` stays clean.
 
+### Where the icon sits
+
+Deck is enabled at the end of the bar's right section, which is the screen corner.
+To move it:
+
+```bash
+scripts/deck-bar-position corner              # last icon, the corner (the install default)
+scripts/deck-bar-position start               # first icon of the right section
+scripts/deck-bar-position before omarchy.power
+scripts/deck-bar-position show                # current order, to pick an id from
+```
+
+It wraps `omarchy bar move`, so the bar updates live. The position is stored in
+`~/.config/omarchy/shell.json`, not in Deck.
+
 ## Arranging the grid
 
 Outside edit mode the grid is a control surface: tap toggles, hold opens the

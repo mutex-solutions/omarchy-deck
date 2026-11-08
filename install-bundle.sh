@@ -67,7 +67,7 @@ echo "install-bundle: Deck + sections"
 if installed "$DECK_ID"; then
   say "deck        -> already installed"
 else
-  omarchy plugin add "$DECK_URL" >/dev/null || die "could not install Deck"
+  omarchy plugin add "$DECK_URL" --yes >/dev/null || die "could not install Deck"
   say "deck        -> installed"
 fi
 if enabled "$DECK_ID"; then
@@ -86,7 +86,7 @@ for row in "${SECTIONS[@]}"; do
   if installed "$id"; then
     say "$id -> already installed"
   else
-    omarchy plugin add "$url" >/dev/null || die "could not install $id"
+    omarchy plugin add "$url" --yes >/dev/null || die "could not install $id"
     say "$id -> installed"
   fi
 

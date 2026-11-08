@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+#
+# Place Deck's bar icon.
+#
+#   deck-bar-position corner        last icon in the right section (the screen corner)
+#   deck-bar-position start         first icon in the right section
+#   deck-bar-position before <id>   e.g. before omarchy.power
+#   deck-bar-position after <id>
+#   deck-bar-position show          print the right section's order
+#
+# A thin wrapper over `omarchy bar move`, which writes bar.layout in
+# ~/.config/omarchy/shell.json; the shell picks the change up live. Enables
+# Deck in the right section first if it is not in the bar yet. "corner" is
+# where a fresh `omarchy plugin enable --section right` lands, so it is also
+# the position a reinstall gives back.
+
+set -euo pipefail
+
+DECK_ID="mutex-solutions.deck"
+USER_SHELL="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/shell.json"
+DEFAULT_SHELL="${OMARCHY_PATH:-/usr/share/omarchy}/config/omarchy/shell.json"
+
+die() { printf 'deck-bar-position: %s\n' "$*" >&2; exit 1; }
+usage() { sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
+command -v omarchy >/dev/null || die "this is not an Omarchy machine"
+command -v jq >/dev/null || die "jq is required"
+
+# The right section as ids, in order. The user's file wins; a machine that
+# never changed its bar has no bar.layout there and uses Omarchy's defaults.
+right_ids() {
+  local f
+  for f in "$USER_SHELL" "$DEFAULT_SHELL"; do
+    [ -f "$f" ] || continue
+    if jq -e '.bar.layout.right' "$f" >/dev/null 2>&1; then
+      jq -r '.bar.layout.right[] | if type == "string" then . else .id end' "$f"
+      return
+    fi
+  done
+}
+
+in_bar() { right_ids | grep -qx "$DECK_ID"; }
+
+show() { right_ids | paste -sd' '; }
+
+[ $# -ge 1 ] || { usage; exit 1; }
+
+case "$1" in
+  -h|--help) usage; exit 0 ;;
+  show)      show; exit 0 ;;
+esac
+
+if ! in_bar; then
+  omarchy plugin enable "$DECK_ID" --section right >/dev/null \
+    || die "could not enable $DECK_ID"
+fi
+
+case "$1" in
+  corner)
+    last=$(right_ids | grep -vx "$DECK_ID" | tail -n1)
+    if [ -n "$last" ]; then
+      omarchy bar move "$DECK_ID" --after "$last" >/dev/null
+    fi
+    ;;
+  start)
+    omarchy bar move "$DECK_ID" --section right --index 0 >/dev/null
+    ;;
+  before|after)
+    [ $# -eq 2 ] || die "$1 needs a widget id (see: deck-bar-position show)"
+    right_ids | grep -qx "$2" || die "$2 is not in the right section (see: deck-bar-position show)"
+    omarchy bar move "$DECK_ID" "--$1" "$2" >/dev/null
+    ;;
+  *)
+    usage; exit 1 ;;
+esac
+
+show
