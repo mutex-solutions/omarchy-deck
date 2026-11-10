@@ -11,10 +11,15 @@ import qs.Commons
 Item {
   id: tile
 
+  Translations { id: strings; directory: Qt.resolvedUrl("../i18n") }
+
   property var section: null
 
   signal toggled()
   signal heldLong()
+  // Custom bodies request a page in the same panel, never through global IPC.
+  // Empty means this tile; a composite body may name another registered section.
+  signal pageRequested(string sectionId)
 
   readonly property bool active: section ? section.active === true : false
   readonly property string label: section && section.label !== undefined ? String(section.label) : ""
@@ -28,6 +33,12 @@ Item {
   property int span: 2
   property int rowspan: 1
   property bool editing: false
+  property bool keyboardFocused: false
+
+  Accessible.role: Accessible.Button
+  Accessible.name: label + (detail !== "" ? ", " + detail : "")
+  Accessible.description: strings.t("deck.activateTheSection")
+  Accessible.onPressAction: if (!tile.editing) tile.toggled()
 
   // Direct manipulation on the home grid: drag to reorder, × to remove. Both
   // are part of the tile, not an editing mode.
@@ -86,7 +97,7 @@ Item {
       : Util.alpha(Color.foreground, Style.normalBorderAlpha)
 
     Behavior on color {
-      ColorAnimation { duration: 100 }
+      ColorAnimation { duration: Style.duration(100) }
     }
   }
 
@@ -107,6 +118,7 @@ Item {
     ignoreUnknownSignals: true
     function onHoldStarted() { showProgress.restart() }
     function onHoldEnded() { tile.endPress() }
+    function onPageRequested(sectionId) { tile.pageRequested(String(sectionId || "")) }
   }
 
   // Compact size: an icon with the title under it. The title is what makes a
@@ -120,6 +132,7 @@ Item {
       anchors.horizontalCenter: parent.horizontalCenter
       anchors.verticalCenter: parent.verticalCenter
       anchors.verticalCenterOffset: -Style.space(6)
+      textFormat: Text.PlainText
       text: tile.icon
       color: tile.active ? Color.accent : Color.foreground
       font.family: Style.font.family
@@ -131,6 +144,7 @@ Item {
       anchors.right: parent.right
       anchors.bottom: parent.bottom
       horizontalAlignment: Text.AlignHCenter
+      textFormat: Text.PlainText
       text: tile.label
       color: Util.alpha(Color.foreground, 0.65)
       font.family: Style.font.family
@@ -159,7 +173,8 @@ Item {
 
       Text {
         anchors.centerIn: parent
-        text: tile.icon
+        textFormat: Text.PlainText
+      text: tile.icon
         color: tile.active ? Color.accent : Color.foreground
         font.family: Style.font.family
         // Nerd Font glyphs sit small inside their em box; at heading size they
@@ -177,7 +192,8 @@ Item {
 
       Text {
         width: parent.width
-        text: tile.label
+        textFormat: Text.PlainText
+      text: tile.label
         color: Color.foreground
         font.family: Style.font.family
         font.pixelSize: Style.font.body
@@ -187,6 +203,7 @@ Item {
 
       Text {
         width: parent.width
+        textFormat: Text.PlainText
         text: tile.detail
         color: Util.alpha(Color.foreground, tile.active ? 0.75 : 0.6)
         font.family: Style.font.family
@@ -194,6 +211,19 @@ Item {
         elide: Text.ElideRight
       }
     }
+  }
+
+  // Keyboard focus is deliberately separate from hover: it appears only after
+  // a navigation key, follows the section id, and never competes with a drag.
+  Rectangle {
+    visible: tile.keyboardFocused && !tile.dragging
+    anchors.fill: parent
+    anchors.margins: -Style.space(3)
+    radius: Style.cornerRadius + Style.space(3)
+    color: "transparent"
+    border.width: 2
+    border.color: Color.accent
+    z: 8
   }
 
   // Hold indicator. Width is animated, not a spinner: the eye reads "still
@@ -213,7 +243,7 @@ Item {
     target: progress
     property: "width"
     to: tile.width
-    duration: 270
+    duration: Style.duration(270)
   }
 
   Timer {
@@ -229,7 +259,6 @@ Item {
     id: holdTimer
     interval: 450
     onTriggered: {
-      if (tile.editing) return
       tile.didLongPress = true
       progressAnim.stop()
       progress.width = 0
@@ -332,10 +361,8 @@ Item {
       tile.didLongPress = false
       tile.pressAbandoned = false
       pressPoint = Qt.point(mouse.x, mouse.y)
-      if (!tile.editing) {
-        holdTimer.start()
-        showProgress.start()
-      }
+      holdTimer.start()
+      showProgress.start()
     }
 
     onPositionChanged: function(mouse) {
@@ -371,7 +398,7 @@ Item {
       if (!tile.editing && !tile.didLongPress && !tile.pressAbandoned && inside) tile.toggled()
     }
 
-    onCanceled: function(mouse) {
+    onCanceled: {
       if (tile.dragging) {
         tile.dragging = false
         tile.dragFinished()

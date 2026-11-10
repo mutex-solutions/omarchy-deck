@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+- Edit-mode holds open the tile's size chooser for default and custom bodies;
+  dragging still cancels the hold. Removed the vague "Pick a control, then a size"
+  helper text from the catalog.
+
+- Square previews now appear for sections providing `tileSquare` as well as
+  `tileComponent`; Calendar's real 2x2 body is no longer hidden by the size picker.
+
+- `host.openStock(id)` confirms focus on Deck's current screen before using
+  Omarchy's focus-routed summon. Omarchy settings and stock-page fallbacks stay on
+  the originating display, without cross-plugin widget enumeration.
+- **Custom pages stay on the originating monitor.** Custom tiles and composite
+  radios emit `pageRequested(sectionId)` to their own Tile instead of calling
+  global `openSection` IPC, which could select another screen's Deck instance.
+- Optional `canToggle: false` makes click/Enter open a page even when a section
+  has a toggle, for wired-only Network sections with no Wi-Fi station.
+- **Keyboard navigation.** Arrows/HJKL move spatially over the real mixed-size
+  grid, with a stable section-id cursor and visible focus ring. Enter/Space
+  activates, O opens the page, E enters edit mode, M opens Sections, A adds,
+  S saves, Delete removes a staged tile, and Ctrl+Up/Down reorders. Text fields
+  suspend the host cursor; Tab keeps Omarchy's panel switching.
+- Nested navigation resets page scroll on source/trail changes, so Back cannot
+  reveal a page with its own toolbar scrolled offscreen.
+- `host.notify()` now shows a temporary info notice; urgent section notices keep
+  precedence. Manager actions expose accessibility names and block empty, busy or
+  duplicate submissions.
+- Added `GridNav.js` tests, plain-text display sinks, accessible tile actions,
+  reduced-motion-aware animations, and English translation catalogs with live
+  language bindings.
+
 ## 0.10.6
 
 - **`scripts/deck-bar-position`** places the bar icon: `corner`, `start`,

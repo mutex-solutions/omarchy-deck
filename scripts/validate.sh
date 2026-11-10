@@ -25,4 +25,7 @@ if [ -d deck ]; then
   test -f deck/Page.qml || { echo "deck/Page.qml missing" >&2; exit 1; }
 fi
 
+command -v node >/dev/null || { echo "node is required" >&2; exit 1; }
+node tests/grid-nav.test.js
+
 echo "validate ok: $id"

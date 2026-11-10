@@ -39,6 +39,7 @@ Required:
 | Member | Type | Meaning |
 | --- | --- | --- |
 | `active` | bool | on or off; drives the tile's accent colour |
+| `canToggle` | bool | optional, default true; false makes click/Enter open the page even if a `toggle()` exists (used by wired-only Network sections with no Wi-Fi station) |
 | `label` | string | tile title |
 | `detail` | string | tile second line |
 | `icon` | string | glyph |
@@ -55,7 +56,8 @@ Required:
 | Member | Type | Meaning |
 | --- | --- | --- |
 | `section` | var | injected: the live section instance |
-| `host` | var | injected: `{ open, close(), notify(text) }` |
+| `host` | var | injected: `{ open, close(), notify(text), openStock(id) }` |
+| `keyboardEditing` | bool | optional: true while one of the page's text inputs owns focus; Deck stops intercepting keys so arrows, Enter, Tab and characters reach the editor |
 
 A custom body that draws its own icon should put it in the same fixed cell as
 Deck's default body: a cell `Style.space(28)` wide, `Style.space(12)` in from
@@ -70,9 +72,13 @@ symbols with Nerd Font glyphs gives icons of visibly different size and weight.
 A custom body owns its own clicks. While the deck is in edit mode the host
 gesture sits above it, so the tile can still be dragged and held. A body with its
 own hold declares `signal holdStarted()` and `signal holdEnded()` and emits them
-around the hold; the host then draws the same progress hairline as on any tile. A section
-with none of the four size components gets Deck's default body: icon, title
-and detail, or icon and title at 1x1.
+around the hold; the host then draws the same progress hairline as on any tile.
+To open a page, declare `signal pageRequested(string sectionId)` and emit it with
+`""` for the current tile. A composite body (for example the Connectivity radios)
+may emit a registered section id instead. Deck handles this inside the originating
+panel: **never call global `openSection` IPC from a tile**, because that can choose
+another monitor's Deck instance. A section with none of the four size components
+gets Deck's default body: icon, title and detail, or icon and title at 1x1.
 
 A page taller than the room the screen leaves scrolls inside the card. Deck
 draws a position mark in a gutter it reserves only while the page scrolls, and
@@ -102,7 +108,16 @@ back button. It declares them and the host draws them:
 | `goTo(i)` | function | jump to a crumb: `-1` is the page's top view, `0` the first label in `trail` |
 
 With none of these declared, back closes the page, as before. The header shows
-`Title > Equalizer > Sources`, each earlier label clickable.
+`Title > Equalizer > Sources`, each earlier label clickable. Changing the source or
+trail resets the page's scroll position, so a nested view never inherits a previous
+view's hidden toolbar.
+
+`host.notify(text)` shows a temporary info notice on the grid (3.2 seconds); an
+urgent section notice still takes precedence. It is not a substitute for inline
+error text on a page that remains open. `host.openStock(id)` focuses Deck's current
+screen and waits for Hyprland before using Omarchy's focus-routed stock summon, so
+the stock panel opens on the originating display. It returns false if that request
+cannot be started; a failed focus dispatch does not open a panel elsewhere.
 
 `host.open` is whether the page is actually on screen: the panel is open and
 the page has not been closed. Anything with a running cost (a capture meter, a
@@ -119,6 +134,9 @@ closing the page belongs in the section.
 | click | hold |
 | --- | --- |
 | `toggle()`, or opens the page when the section has no toggle | opens the page, when the registry entry has one |
+
+In edit mode, click never toggles. A hold opens the tile's size chooser instead;
+moving far enough to drag cancels the hold.
 
 A hold never toggles. A tap shows no hold indicator: the progress hairline is
 attached 180 ms after the press begins, so short presses show nothing at all.

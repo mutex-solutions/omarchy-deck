@@ -54,6 +54,29 @@ scripts/deck-bar-position show                # current order, to pick an id fro
 It wraps `omarchy bar move`, so the bar updates live. The position is stored in
 `~/.config/omarchy/shell.json`, not in Deck.
 
+## Keyboard
+
+The cursor appears when you first navigate, and follows the section id rather than
+its model index, so dragging or resizing does not move focus to another control.
+
+| Key | Action |
+| --- | --- |
+| Arrows or H/J/K/L | Move spatially across the actual mixed-size grid |
+| Enter or Space | The tile's click action (toggle, or open when it has no toggle) |
+| O | Open the selected section's page without toggling it |
+| E | Begin a staged edit |
+| M | Open Sections |
+| A | Open Add while editing |
+| S | Save the staged layout |
+| Delete or X | Remove the selected tile while editing (staged until Save) |
+| Ctrl+Up/Down | Move the selected tile vertically while editing |
+| Esc | Cancel an input, step back a view, cancel a staged edit, or close |
+| Tab / Shift+Tab | Switch to Omarchy's neighbouring panel, as in stock panels |
+
+Text fields take over keys while focused. Escape cancels Wi-Fi credentials and
+clears Tailscale search; in other forms it first leaves the editor. Up/Down scroll
+long pages and manager views.
+
 ## Arranging the grid
 
 Outside edit mode the grid is a control surface: tap toggles, hold opens the
@@ -68,6 +91,7 @@ Inside edit mode:
 
 - **Drag a tile to any cell.** The grid is four columns wide and as tall as it
   needs to be. The landing slot snaps to the cells under the pointer.
+- **Hold a tile** to open its size choices without opening the section itself.
 - A tile dropped over another one **displaces** it: the overlapped tile moves
   to the first free cells, so a `1x1` can take a cell inside a `2x2` or `2x1`
   area. This is what makes a 2x2 block of four individual `1x1` tiles possible.
@@ -218,6 +242,13 @@ automatically. The registry is explicit, so a half-written section cannot appear
 ## Requirements
 
 - Omarchy 4.x (Quickshell shell)
+
+## Localization
+
+`i18n/en.json` is the fallback catalog. Deck reads it through Omarchy's
+`Translations` service, so adding another language as `i18n/<code>.json` follows
+Setup > Language without a shell restart. Keep new display strings in the catalog
+and their lookups inside QML bindings.
 
 ## Licence
 

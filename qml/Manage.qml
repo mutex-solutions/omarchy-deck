@@ -10,6 +10,8 @@ import qs.Commons
 Column {
   id: mg
 
+  Translations { id: strings; directory: Qt.resolvedUrl("../i18n") }
+
   property string pluginDir: ""
   // The host's install flow (scripts/deck-add-section), shown here so a link
   // pasted on this page reports on this page.
@@ -33,6 +35,7 @@ Column {
   property bool sourcesBusy: false
 
   readonly property string helper: pluginDir + "/scripts/deck-sections"
+  readonly property bool keyboardEditing: urlField.activeFocus || sourceField.activeFocus
 
   spacing: Style.space(4)
 
@@ -173,6 +176,7 @@ Column {
   component Chip: Rectangle {
     id: chip
     property string label: ""
+    property string accessibleName: ""
     property bool primary: false
     property bool warn: false
     signal picked()
@@ -180,6 +184,10 @@ Column {
     width: chipText.implicitWidth + Style.space(16)
     height: Style.space(20)
     radius: Style.cornerRadius
+    opacity: enabled ? 1 : 0.45
+    Accessible.role: Accessible.Button
+    Accessible.name: accessibleName !== "" ? accessibleName : label
+    Accessible.onPressAction: if (enabled) picked()
     color: chipMouse.containsMouse
       ? Util.alpha(chip.warn ? Color.urgent : Color.accent, Style.hoverFillAlpha)
       : "transparent"
@@ -190,6 +198,7 @@ Column {
 
     Text {
       id: chipText
+      textFormat: Text.PlainText
       anchors.centerIn: parent
       text: chip.label
       color: chip.primary ? Color.accent : chip.warn ? Color.urgent : Color.foreground
@@ -200,13 +209,15 @@ Column {
     MouseArea {
       id: chipMouse
       anchors.fill: parent
+      enabled: chip.enabled
       hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
+      cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
       onClicked: chip.picked()
     }
   }
 
   component Caps: Text {
+    textFormat: Text.PlainText
     color: Util.alpha(Color.foreground, 0.45)
     font.family: Style.font.family
     font.pixelSize: Style.font.caption
@@ -248,6 +259,12 @@ Column {
       font.pixelSize: Style.font.caption
       clip: true
       selectByMouse: true
+      Accessible.role: Accessible.EditableText
+      Accessible.name: parent.placeholder
+      Keys.onEscapePressed: {
+        input.focus = false
+        mg.back()
+      }
       onAccepted: parent.accepted()
     }
   }
@@ -268,6 +285,9 @@ Column {
       color: arrowMouse.containsMouse ? Util.alpha(Color.foreground, Style.hoverFillAlpha) : "transparent"
       border.width: 1
       border.color: Util.alpha(Color.foreground, Style.normalBorderAlpha)
+      Accessible.role: Accessible.Button
+      Accessible.name: strings.t("deck.backToDeck")
+      Accessible.onPressAction: mg.back()
 
       Text {
         anchors.centerIn: parent
@@ -291,7 +311,7 @@ Column {
       anchors.left: backArrow.right
       anchors.leftMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
-      text: "Deck"
+      text: strings.t("deck.deck_168e49")
       color: backMouse.containsMouse ? Color.accent : Util.alpha(Color.foreground, 0.6)
       font.family: Style.font.family
       font.pixelSize: Style.font.title
@@ -321,7 +341,7 @@ Column {
       anchors.left: crumb.right
       anchors.leftMargin: Style.space(6)
       anchors.verticalCenter: parent.verticalCenter
-      text: "Sections"
+      text: strings.t("deck.sections")
       color: Color.foreground
       font.family: Style.font.family
       font.pixelSize: Style.font.title
@@ -331,6 +351,7 @@ Column {
     Chip {
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
+      enabled: !mg.checking
       label: mg.checking ? "Checking…" : "Reload"
       onPicked: {
         mg.registryChanged()
@@ -354,7 +375,7 @@ Column {
     Text {
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
-      text: "Updated. Restart to use it."
+      text: strings.t("deck.updatedRestartToUseIt")
       color: Color.accent
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
@@ -363,13 +384,13 @@ Column {
     Chip {
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      label: "Restart shell"
+      label: strings.t("deck.restartShell")
       primary: true
       onPicked: Quickshell.execDetached(["omarchy", "restart", "shell"])
     }
   }
 
-  Caps { text: "INSTALLED" }
+  Caps { text: strings.t("deck.installed") }
 
   Repeater {
     model: mg.sections
@@ -391,6 +412,7 @@ Column {
         Text {
           width: parent.width
           elide: Text.ElideRight
+          textFormat: Text.PlainText
           text: String(row.modelData.title)
           color: Color.foreground
           font.family: Style.font.family
@@ -401,6 +423,7 @@ Column {
         Text {
           width: parent.width
           elide: Text.ElideRight
+          textFormat: Text.PlainText
           text: mg.statusText(row.modelData)
           color: row.modelData.state === "update" ? Color.accent
             : row.modelData.state === "unknown" ? Color.urgent
@@ -418,12 +441,14 @@ Column {
 
         Chip {
           visible: row.modelData.state === "update"
+          enabled: mg.busyId === ""
           label: mg.busyId === row.modelData.id ? "Updating…" : "Update"
           primary: true
           onPicked: mg.act(["update", row.modelData.pluginId], row.modelData.id)
         }
 
         Chip {
+          enabled: mg.busyId === ""
           label: row.armed ? "Confirm" : "Remove"
           warn: row.armed
           onPicked: {
@@ -443,7 +468,7 @@ Column {
   Text {
     visible: mg.sections.length === 0 && !mg.checking
     width: parent.width
-    text: "No sections installed"
+    text: strings.t("deck.noSectionsInstalled")
     color: Util.alpha(Color.foreground, 0.4)
     font.family: Style.font.family
     font.pixelSize: Style.font.caption
@@ -453,6 +478,7 @@ Column {
     visible: mg.message !== ""
     width: parent.width
     wrapMode: Text.Wrap
+    textFormat: Text.PlainText
     text: mg.message
     color: Color.urgent
     font.family: Style.font.family
@@ -466,12 +492,12 @@ Column {
   }
 
   // ---- install from a GitHub link ----
-  Caps { text: "ADD FROM GITHUB" }
+  Caps { text: strings.t("deck.addFromGithub") }
 
   Entry {
     id: urlField
-    placeholder: "https://github.com/user/omarchy-plugin"
-    onAccepted: mg.installRequested(text)
+    placeholder: strings.t("deck.httpsGithubComUserOmarchyPlugin")
+    onAccepted: if (!mg.installing && text.trim() !== "") mg.installRequested(text.trim())
   }
 
   Item {
@@ -483,7 +509,8 @@ Column {
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
       label: mg.installing ? "Installing…" : "Install"
-      onPicked: if (!mg.installing) mg.installRequested(urlField.text)
+      enabled: !mg.installing && urlField.text.trim() !== ""
+      onPicked: mg.installRequested(urlField.text.trim())
     }
 
     Text {
@@ -492,6 +519,7 @@ Column {
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
       elide: Text.ElideRight
+      textFormat: Text.PlainText
       text: mg.installError !== "" ? mg.installError : mg.installStatus
       color: mg.installError !== "" ? Color.urgent : Util.alpha(Color.foreground, 0.55)
       font.family: Style.font.family
@@ -506,7 +534,7 @@ Column {
   }
 
   // ---- where extra sections come from ----
-  Caps { text: "SOURCES" }
+  Caps { text: strings.t("deck.sources") }
 
   Repeater {
     model: mg.sources
@@ -527,6 +555,7 @@ Column {
         Text {
           width: parent.width
           elide: Text.ElideRight
+          textFormat: Text.PlainText
           text: String(src.modelData.name)
           color: Color.foreground
           font.family: Style.font.family
@@ -536,6 +565,7 @@ Column {
         Text {
           width: parent.width
           elide: Text.ElideMiddle
+          textFormat: Text.PlainText
           text: String(src.modelData.target)
           color: Util.alpha(Color.foreground, 0.45)
           font.family: Style.font.family
@@ -552,8 +582,10 @@ Column {
 
         Chip {
           visible: src.modelData.builtin !== true
+          enabled: !mg.sourcesBusy
           anchors.right: parent.right
           label: "×"
+          accessibleName: "Remove source " + String(src.modelData.name)
           onPicked: mg.sourcesRun(["source-remove", src.modelData.id])
         }
       }
@@ -562,8 +594,8 @@ Column {
 
   Entry {
     id: sourceField
-    placeholder: "owner/repo or https address of a catalog.json"
-    onAccepted: addSource.picked()
+    placeholder: strings.t("deck.ownerRepoOrHttpsAddressOfACatalogJson")
+    onAccepted: if (!mg.sourcesBusy && text.trim() !== "") addSource.picked()
   }
 
   Item {
@@ -575,12 +607,8 @@ Column {
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
       label: mg.sourcesBusy ? "Checking…" : "Add source"
+      enabled: !mg.sourcesBusy && sourceField.text.trim() !== ""
       onPicked: {
-        if (mg.sourcesBusy) return
-        if (sourceField.text.trim() === "") {
-          mg.sourceError = "Enter a repo or an address first"
-          return
-        }
         mg.sourceError = ""
         mg.sourceAddPending = true
         mg.sourcesRun(["source-add", sourceField.text.trim()])
@@ -593,6 +621,7 @@ Column {
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
       elide: Text.ElideRight
+      textFormat: Text.PlainText
       text: mg.sourceError
       color: Color.urgent
       font.family: Style.font.family

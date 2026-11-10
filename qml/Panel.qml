@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Ui
 import qs.Commons
+import "GridNav.js" as GridNav
 
 // Deck: a pluggable control surface.
 //
@@ -23,6 +24,8 @@ import qs.Commons
 // an edit here, the contract is wrong.
 Panel {
   id: root
+
+  Translations { id: strings; directory: Qt.resolvedUrl("../i18n") }
 
   moduleName: "mutex-solutions.deck"
   ipcTarget: "mutex-solutions.deck"
@@ -173,7 +176,7 @@ Panel {
   }
   onPageImplicitHeightChanged: updatePageScrolls()
   onPageMaxHeightChanged: updatePageScrolls()
-  onPageSourceChanged: updatePageScrolls()
+  onPageSourceChanged: { updatePageScrolls(); resetPageScroll() }
 
   readonly property real gridUnit: Math.max(1, (gridHost.width - 3 * gridGap) / 4)
 
@@ -258,6 +261,81 @@ Panel {
     for (var i = 0; i < placements.length; i++)
       if (String(placements[i].id) === String(id)) return placements[i]
     return null
+  }
+
+  // ---- keyboard cursor ---------------------------------------------------
+  // Hidden until a key is used: pointer users do not get a second selection
+  // ring. The id survives reflows, so a drag or resize never moves focus to a
+  // different section merely because its model index changed.
+  property string cursorId: ""
+  property bool cursorActive: false
+
+  function ensureCursor() {
+    if (placements.length === 0) {
+      cursorId = ""
+      return false
+    }
+    if (!placementById(cursorId)) cursorId = String(placements[0].id)
+    cursorActive = true
+    return true
+  }
+
+  function scrollCursorIntoView() {
+    var p = placementById(cursorId)
+    if (!p || !contentScroll.contentItem) return
+    var flick = contentScroll.contentItem
+    var top = gridHost.y + p.row * (gridUnit + gridGap)
+    var bottom = top + p.rows * gridUnit + Math.max(0, p.rows - 1) * gridGap
+    if (top < flick.contentY) flick.contentY = top
+    else if (bottom > flick.contentY + flick.height) flick.contentY = bottom - flick.height
+  }
+
+  function moveCursor(dx, dy) {
+    if (pageOpen || view !== "grid") return
+    if (!cursorActive) { ensureCursor(); return }
+    if (!ensureCursor()) return
+    cursorId = GridNav.next(placements, cursorId, dx, dy)
+    scrollCursorIntoView()
+  }
+
+  function activateCursor() {
+    if (pageOpen || view !== "grid" || !ensureCursor()) return
+    var p = placementById(cursorId)
+    if (!p) return
+    if (editing) {
+      chooserId = cursorId
+      view = "size"
+      return
+    }
+    var section = sectionMap[cursorId]
+    if (section && section.canToggle !== false && typeof section.toggle === "function") section.toggle()
+    else openPage(p)
+  }
+
+  function openCursorPage() {
+    if (pageOpen || view !== "grid" || editing || !ensureCursor()) return
+    var p = placementById(cursorId)
+    if (p) openPage(p)
+  }
+
+  function removeCursorTile() {
+    if (!editing || pageOpen || view !== "grid" || !ensureCursor()) return
+    setShown(cursorId, false)
+    ensureCursor()
+    scrollCursorIntoView()
+  }
+
+  function reorderCursor(dy) {
+    if (!editing || pageOpen || view !== "grid" || !ensureCursor()) return
+    var p = placementById(cursorId)
+    if (!p) return
+    var row = Math.max(0, p.row + dy)
+    if (row === p.row) return
+    var next = placeWithDisplacement(cursorId, p.col, row)
+    if (next) {
+      commitPlacements(next)
+      scrollCursorIntoView()
+    }
   }
 
   function sectionById(id) {
@@ -364,7 +442,7 @@ Panel {
         shown: s.shown,
         span: s.span,
         rows: s.rows,
-        custom: !!(live && live.tileComponent) || s.rows === 2
+        custom: !!(live && (live.tileComponent || live.tileSquare)) || s.rows === 2
       })
       seen[String(s.id)] = true
     }
@@ -669,6 +747,19 @@ Panel {
   // id -> loaded section item, so an IPC call or keybind can drive a section
   // without the panel being open.
   property var sectionMap: ({})
+  property string hostNotice: ""
+
+  Timer {
+    id: hostNoticeTimer
+    interval: 3200
+    onTriggered: root.hostNotice = ""
+  }
+
+  function showHostNotice(text) {
+    hostNotice = String(text || "").trim()
+    if (hostNotice !== "") hostNoticeTimer.restart()
+    else hostNoticeTimer.stop()
+  }
 
   // The notice to draw, urgent before info. A section exposes
   // `notice = { severity, title, detail }` or null; Deck draws the strip, so the
@@ -681,9 +772,9 @@ Panel {
       if (item.notice.severity === "urgent") return item.notice
       if (!first) first = item.notice
     }
+    if (hostNotice !== "") return { severity: "info", title: hostNotice, detail: "" }
     return first
   }
-
   property string pageSource: ""
   property string pageTitle: ""
   property string pageSectionId: ""
@@ -695,6 +786,7 @@ Panel {
   // full previews for one control. Editing is a place you go, not a mode the
   // grid wears.
   property string view: "grid"
+  onViewChanged: cursorActive = false
   // Nothing on the grid is mutable unless this is on: no x, no drag, no +.
   property bool editing: false
   property bool editDirty: false
@@ -707,7 +799,9 @@ Panel {
     // poll should bind to this rather than staying hot behind a closed panel.
     readonly property bool open: root.opened && root.pageOpen
     function close() { root.closePage() }
-    function notify(text) { console.log("deck:", String(text)) }
+    function notify(text) { root.showHostNotice(text) }
+    // Open a stock panel on this panel's own screen, not through focus-routed IPC.
+    function openStock(id) { return root.openStockById(id) }
   }
 
   // A section may live in this plugin or in another installed plugin. Absolute
@@ -736,6 +830,7 @@ Panel {
   // the stock Omarchy panel. Still useful, and better than doing nothing.
   function openPage(entry) {
     if (!entry) return
+    cursorActive = false
     if (entry.page) {
       pageTitle = String(entry.title || entry.id || "")
       pageSectionId = String(entry.id || "")
@@ -755,6 +850,14 @@ Panel {
   // `trail`, `canGoBack`, `goBack()` and `goTo(i)`. Back, Esc and the crumbs in
   // the header all go through here, so a nested view is never a dead end.
   readonly property var pageTrail: pageLoader.item && pageLoader.item.trail ? pageLoader.item.trail : []
+
+  // A nested view is a new screen, not a continuation of the previous scroll
+  // position. Reset on both loader changes and in-place trail changes, so Back
+  // never reveals a month or form with its own toolbar scrolled offscreen.
+  function resetPageScroll() {
+    if (pageScroll.contentItem) pageScroll.contentItem.contentY = 0
+  }
+  onPageTrailChanged: resetPageScroll()
 
   function pageBack() {
     if (!pageOpen && view === "manage") {
@@ -1067,6 +1170,7 @@ Panel {
 
       Text {
         width: parent.width
+        textFormat: Text.PlainText
         text: row.entry ? row.entry.title : ""
         color: Color.foreground
         font.family: Style.font.family
@@ -1173,7 +1277,7 @@ Panel {
       Text {
         id: installText
         anchors.centerIn: parent
-        text: "Install"
+        text: strings.t("deck.install")
         color: Color.foreground
         font.family: Style.font.family
         font.pixelSize: Style.font.caption
@@ -1226,13 +1330,41 @@ Panel {
     // The floor only guards that first, empty frame; once there is content it
     // must not pad a short page (Night light, Lid Awake) with dead space.
     contentHeight: Math.max(
-      content.implicitHeight > 0 ? 0
+      deckContent.implicitHeight > 0 ? 0
         : (root.view === "grid" ? Style.space(180) : Style.space(360)),
-      panel.fittedContentHeight(content.implicitHeight, root.panelCap))
+      panel.fittedContentHeight(deckContent.implicitHeight, root.panelCap))
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
+      // Text entry belongs to the section, not to Deck's spatial cursor. Pages
+      // expose keyboardEditing while one of their inputs owns focus.
+      blocked: repoField.activeFocus || shareField.activeFocus || manage.keyboardEditing
+        || (pageLoader.item && pageLoader.item.keyboardEditing === true)
+      reorderable: root.editing && !root.pageOpen && root.view === "grid"
+      onMoveRequested: function(dx, dy) {
+        if (root.pageOpen && dy !== 0) {
+          var flick = pageScroll.contentItem
+          flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height,
+            flick.contentY + dy * Style.space(48)))
+        } else if (root.view !== "grid" && dy !== 0) {
+          var outer = contentScroll.contentItem
+          outer.contentY = Math.max(0, Math.min(outer.contentHeight - outer.height,
+            outer.contentY + dy * Style.space(48)))
+        } else root.moveCursor(dx, dy)
+      }
+      onReorderRequested: function(dy) { root.reorderCursor(dy) }
+      onActivateRequested: root.activateCursor()
+      onDeleteRequested: root.removeCursorTile()
+      onTabRequested: function(direction) { root.switchPanel(direction) }
+      onTextKey: function(t) {
+        if (root.pageOpen) return
+        if (t === "o" || t === "O") root.openCursorPage()
+        else if ((t === "e" || t === "E") && !root.editing && root.view === "grid") root.beginEdit()
+        else if ((t === "m" || t === "M") && !root.editing && root.view === "grid") root.view = "manage"
+        else if ((t === "a" || t === "A") && root.editing) root.view = "catalog"
+        else if ((t === "s" || t === "S") && root.editing) root.saveEdit()
+      }
       onCloseRequested: {
         // Esc walks back through the layout pages before it closes the panel.
         if (root.pageOpen) root.pageBack()
@@ -1242,7 +1374,6 @@ Panel {
         else if (root.editing) root.cancelEdit()
         else root.close()
       }
-      onActivateRequested: root.close()
     }
 
     // The grid fits without scrolling, but arrange mode adds the size
@@ -1257,7 +1388,7 @@ Panel {
       ScrollBar.vertical.policy: ScrollBar.AlwaysOff
 
     Column {
-      id: content
+      id: deckContent
       width: contentScroll.availableWidth
       spacing: Style.space(10)
 
@@ -1271,7 +1402,7 @@ Panel {
           id: deckTitle
           anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
-          text: "DECK"
+          text: strings.t("deck.deck")
           color: Util.alpha(Color.foreground, 0.45)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -1295,7 +1426,7 @@ Panel {
           Text {
             id: manageText
             anchors.centerIn: parent
-            text: "Sections"
+            text: strings.t("deck.sections")
             color: Color.foreground
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -1326,7 +1457,7 @@ Panel {
           Text {
             id: editText
             anchors.centerIn: parent
-            text: "Edit"
+            text: strings.t("deck.edit")
             color: Color.foreground
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -1357,7 +1488,7 @@ Panel {
           Text {
             id: saveText
             anchors.centerIn: parent
-            text: "Save"
+            text: strings.t("deck.save")
             color: Color.background
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -1389,7 +1520,7 @@ Panel {
           Text {
             id: cancelText
             anchors.centerIn: parent
-            text: "Cancel"
+            text: strings.t("deck.cancel")
             color: Color.foreground
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -1421,7 +1552,7 @@ Panel {
           Text {
             id: addText
             anchors.centerIn: parent
-            text: "+ Add"
+            text: strings.t("deck.add")
             color: Color.accent
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -1456,7 +1587,7 @@ Panel {
         Text {
           anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
-          text: "CANVAS"
+          text: strings.t("deck.canvas")
           color: Util.alpha(Color.foreground, 0.45)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -1480,7 +1611,7 @@ Panel {
             Text {
               id: addRowText
               anchors.centerIn: parent
-              text: "+ 1 row"
+              text: strings.t("deck.1Row")
               color: Color.accent
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
@@ -1508,7 +1639,7 @@ Panel {
             Text {
               id: removeRowText
               anchors.centerIn: parent
-              text: "− 1 row"
+              text: strings.t("deck.1Row_849474")
               color: Color.foreground
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
@@ -1527,6 +1658,7 @@ Panel {
 
       // ---------------- sections: install, update, remove ----------------
       Manage {
+        id: manage
         width: parent.width
         visible: !root.pageOpen && root.view === "manage"
         pluginDir: root.pluginDir
@@ -1598,6 +1730,9 @@ Panel {
             editing: root.editing
             draggable: root.editing && !!placement
             removable: root.editing && !!placement
+            keyboardFocused: root.cursorActive && root.view === "grid" && !root.pageOpen
+              && root.cursorId === String(modelData.id)
+            onHoveredChanged: if (hovered && placement) root.cursorId = String(modelData.id)
 
             onRemoveRequested: root.setShown(modelData.id, false)
             onDragStarted: function(px, py) {
@@ -1626,13 +1761,24 @@ Panel {
             section: sectionLoader.item
 
             onToggled: {
-              if (sectionLoader.item && typeof sectionLoader.item.toggle === "function")
+              if (sectionLoader.item && sectionLoader.item.canToggle !== false
+                  && typeof sectionLoader.item.toggle === "function")
                 sectionLoader.item.toggle()
               else if (placement)
                 root.openPage(placement)
             }
 
-            onHeldLong: if (placement) root.openPage(placement)
+            onHeldLong: {
+              if (!placement) return
+              if (root.editing) {
+                root.chooserId = String(modelData.id)
+                root.view = "size"
+              } else root.openPage(placement)
+            }
+            onPageRequested: function(sectionId) {
+              var target = sectionId !== "" ? root.sectionById(sectionId) : placement
+              if (target) root.openPage(target)
+            }
           }
         }
 
@@ -1736,7 +1882,7 @@ Panel {
           anchors.left: catalogBack.right
           anchors.leftMargin: Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
-          text: "Add a control"
+          text: strings.t("deck.addAControl")
           color: Color.foreground
           font.family: Style.font.family
           font.pixelSize: Style.font.title
@@ -1757,7 +1903,7 @@ Panel {
           Text {
             id: doneText
             anchors.centerIn: parent
-            text: "Grid"
+            text: strings.t("deck.grid")
             color: Color.accent
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -1770,22 +1916,6 @@ Panel {
             cursorShape: Qt.PointingHandCursor
             onClicked: root.view = "grid"
           }
-        }
-      }
-
-      Item {
-        width: parent.width
-        height: Style.space(18)
-        visible: !root.pageOpen && root.editing && root.view === "catalog"
-
-        Text {
-          width: parent.width
-          anchors.verticalCenter: parent.verticalCenter
-          text: "Pick a control, then a size."
-          color: Util.alpha(Color.foreground, 0.45)
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-          elide: Text.ElideRight
         }
       }
 
@@ -1802,7 +1932,7 @@ Panel {
           Text {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            text: "ON THE GRID"
+            text: strings.t("deck.onTheGrid")
             color: Util.alpha(Color.foreground, 0.45)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -1848,7 +1978,7 @@ Panel {
           Text {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            text: "AVAILABLE"
+            text: strings.t("deck.available")
             color: Util.alpha(Color.foreground, 0.45)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -1887,7 +2017,7 @@ Panel {
           height: Style.space(22)
           verticalAlignment: Text.AlignVCenter
           leftPadding: Style.space(8)
-          text: "Everything is on the grid"
+          text: strings.t("deck.everythingIsOnTheGrid")
           color: Util.alpha(Color.foreground, 0.4)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -1908,7 +2038,7 @@ Panel {
           Text {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            text: "ADD FROM GITHUB"
+            text: strings.t("deck.addFromGithub")
             color: Util.alpha(Color.foreground, 0.45)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -1920,7 +2050,7 @@ Panel {
           id: repoField
           width: parent.width
           height: Style.space(28)
-          placeholderText: "https://github.com/user/omarchy-plugin"
+          placeholderText: strings.t("deck.httpsGithubComUserOmarchyPlugin")
           placeholderTextColor: Util.alpha(Color.foreground, 0.35)
           color: Color.foreground
           font.family: Style.font.family
@@ -1933,6 +2063,15 @@ Panel {
             radius: Style.cornerRadius
           }
           onAccepted: root.installSection(text, "", "", "")
+          Keys.priority: Keys.BeforeItem
+          Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Escape) {
+              repoField.focus = false
+              root.view = "grid"
+              root.chooserId = ""
+              event.accepted = true
+            }
+          }
         }
 
         Item {
@@ -1977,6 +2116,7 @@ Panel {
             anchors.leftMargin: Style.space(8)
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
             text: root.installError !== ""
               ? root.installError
               : (root.installing ? "Installing…" : root.installStatus)
@@ -1991,7 +2131,7 @@ Panel {
         Text {
           width: parent.width
           wrapMode: Text.Wrap
-          text: "Only GitHub repositories. A plugin runs with your shell's permissions."
+          text: strings.t("deck.onlyGithubRepositoriesAPluginRunsWithYourShellSPermissions")
           color: Util.alpha(Color.foreground, 0.35)
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
@@ -2012,7 +2152,7 @@ Panel {
           Text {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            text: "SHARE THIS DECK"
+            text: strings.t("deck.shareThisDeck")
             color: Util.alpha(Color.foreground, 0.45)
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -2062,7 +2202,7 @@ Panel {
           width: parent.width
           height: Style.space(28)
           text: root.sharePathDefault
-          placeholderText: "Path to a deck file"
+          placeholderText: strings.t("deck.pathToADeckFile")
           placeholderTextColor: Util.alpha(Color.foreground, 0.35)
           color: Color.foreground
           font.family: Style.font.family
@@ -2075,6 +2215,13 @@ Panel {
             radius: Style.cornerRadius
           }
           onAccepted: root.importLayout(text)
+          Keys.priority: Keys.BeforeItem
+          Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Escape) {
+              shareField.focus = false
+              event.accepted = true
+            }
+          }
         }
 
         Item {
@@ -2097,7 +2244,7 @@ Panel {
             Text {
               id: importText
               anchors.centerIn: parent
-              text: "Import"
+              text: strings.t("deck.import")
               color: Color.foreground
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
@@ -2118,6 +2265,7 @@ Panel {
             anchors.leftMargin: Style.space(8)
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
             text: root.shareError !== "" ? root.shareError : root.shareStatus
             color: root.shareError !== "" ? Color.urgent
               : Util.alpha(Color.foreground, 0.55)
@@ -2130,7 +2278,7 @@ Panel {
         Text {
           width: parent.width
           wrapMode: Text.Wrap
-          text: "Export writes the order, sizes and each section's repository. "
+          text: strings.t("deck.exportWritesTheOrderSizesAndEachSectionSRepository")
             + "Import installs what is missing and applies the deck."
           color: Util.alpha(Color.foreground, 0.35)
           font.family: Style.font.family
@@ -2221,6 +2369,7 @@ Panel {
 
             Text {
               width: parent.width
+              textFormat: Text.PlainText
               text: modelData.sub + "  ·  " + modelData.label
                 + (sizeOption.current ? "  ·  current" : "")
               color: sizeOption.current ? Color.accent
@@ -2285,7 +2434,7 @@ Panel {
             Text {
               id: sizeRemoveText
               anchors.centerIn: parent
-              text: "Remove from the deck"
+              text: strings.t("deck.removeFromTheDeck")
               color: Color.urgent
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
@@ -2348,6 +2497,7 @@ Panel {
 
           Text {
             width: parent.width
+            textFormat: Text.PlainText
             text: root.notice ? String(root.notice.title) : ""
             color: Color.foreground
             font.family: Style.font.family
@@ -2359,6 +2509,7 @@ Panel {
           Text {
             width: parent.width
             visible: !!root.notice && !!root.notice.detail
+            textFormat: Text.PlainText
             text: root.notice ? String(root.notice.detail) : ""
             color: Util.alpha(Color.foreground, 0.55)
             font.family: Style.font.family
@@ -2410,6 +2561,7 @@ Panel {
           Text {
             height: parent.height
             verticalAlignment: Text.AlignVCenter
+            textFormat: Text.PlainText
             text: root.pageTitle
             color: root.pageTrail.length > 0
               ? (titleMouse.containsMouse ? Color.accent : Util.alpha(Color.foreground, 0.6))
@@ -2451,6 +2603,7 @@ Panel {
               Text {
                 height: parent.height
                 verticalAlignment: Text.AlignVCenter
+                textFormat: Text.PlainText
                 text: String(crumb.modelData)
                 color: crumb.last ? Color.foreground
                   : (crumbMouse.containsMouse ? Color.accent : Util.alpha(Color.foreground, 0.6))
@@ -2538,7 +2691,9 @@ Panel {
   }
 
   onOpenedChanged: {
+    if (opened) cursorActive = false
     if (!opened) {
+      showHostNotice("")
       // Clicking out of edit mode discards the staged layout.
       if (editing) cancelEdit()
       closePage()
@@ -2550,12 +2705,37 @@ Panel {
 
   // ---- optional: open a section's stock Omarchy panel ---------------------
   //
-  // Only used when a section declares no page. A bar-widget's popup can only be
-  // opened through its live bar slot, so this is a summon, not an embed, and
-  // only one popout exists at a time.
+  // Only used when a section declares no page. Resolve the bar-widget instance
+  // whose window is on this screen, so multi-monitor navigation never follows
+  // the globally focused output instead of the panel the user actually used.
+  property string requestedStockId: ""
+  function luaString(value) {
+    return '"' + String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"'
+  }
+  Process {
+    id: stockFocusProc
+    onExited: function(code) {
+      var id = root.requestedStockId
+      root.requestedStockId = ""
+      if (code !== 0 || id === "") return
+      root.close()
+      // shell.summon deliberately chooses the focused monitor's live widget.
+      // The confirmed focus-monitor dispatch above makes that this panel's screen.
+      Quickshell.execDetached(["omarchy-shell", "shell", "summon", id, "{}"])
+    }
+  }
+
+  function openStockById(id) {
+    if (!panel.screen || stockFocusProc.running) return false
+    requestedStockId = String(id || "")
+    stockFocusProc.command = ["hyprctl", "eval",
+      "hl.dispatch(hl.dsp.focus({ monitor = " + luaString(panel.screen.name) + " }))"]
+    stockFocusProc.running = true
+    return true
+  }
+
   function openStock(section) {
     if (!section || !section.stockPanel) return
-    root.close()
-    Quickshell.execDetached(["omarchy-shell", "shell", "summon", String(section.stockPanel), "{}"])
+    openStockById(String(section.stockPanel))
   }
 }

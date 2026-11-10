@@ -21,7 +21,8 @@ for h in \
   omarchy-hyprland-monitor-scaling \
   omarchy-display-text-size \
   omarchy-network-status \
-  omarchy-network-band
+  omarchy-network-band \
+  hyprctl
 do
   need "$h"
 done
@@ -39,6 +40,12 @@ fi
 for p in network bluetooth tailscale monitor; do
   [ -d "/usr/share/omarchy/shell/plugins/panels/$p" ] || echo "warning: stock panel '$p' moved"
 done
+
+bar=/usr/share/omarchy/shell/plugins/bar/Bar.qml
+if [ ! -f "$bar" ] || ! grep -q 'function focusedScreenName' "$bar"; then
+  echo "stock Bar.qml no longer routes summoned panels through the focused monitor"
+  fail=1
+fi
 
 [ "$fail" -eq 0 ] && echo "upstream references ok"
 exit "$fail"
